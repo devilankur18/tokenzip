@@ -1,4 +1,4 @@
-import { Surreal, createRemoteEngines } from 'surrealdb';
+import { Surreal, createRemoteEngines, StringRecordId } from 'surrealdb';
 import { createNodeEngines } from '@surrealdb/node';
 import { IStore } from '../interface.js';
 import { GraphNode, GraphEdge, GraphResult, StoreStats } from '../../types/graph.js';
@@ -52,14 +52,14 @@ export class SurrealStore implements IStore {
   }
 
   async stats(): Promise<StoreStats> {
-    const res = await this.db.query<any[][]>('INFO FOR DB;');
-    const tables = res[0]?.[0]?.tables || {};
+    const res = await this.db.query<any[]>('INFO FOR DB;');
+    const tables = res[0]?.tables || {};
     
     const nodeCount: Record<string, number> = {};
     const edgeCount: Record<string, number> = {};
     
     for (const [tableName, _] of Object.entries(tables)) {
-      const countRes = await this.db.query<any[][]>(`SELECT count() FROM type::table($tb)`, { tb: tableName });
+      const countRes = await this.db.query<any[][]>(`SELECT count() FROM type::table($tb) GROUP ALL`, { tb: tableName });
       const count = countRes[0]?.[0]?.count || 0;
       nodeCount[tableName] = count;
     }
@@ -79,9 +79,9 @@ export class SurrealStore implements IStore {
         delete data[key];
       }
     }
-    const res = await this.db.query<T[][]>(`CREATE type::record($id) CONTENT $data;`, { 
-      id,
-      data 
+    const recordId = typeof id === 'string' ? new StringRecordId(id) : id;
+    const res = await this.db.query<T[][]>(`UPSERT ${recordId.toString()} CONTENT $data;`, { 
+      data: { ...data }
     });
     return res[0][0];
   }
@@ -115,7 +115,8 @@ export class SurrealStore implements IStore {
         delete data[key];
       }
     }
-    const res = await this.db.query<T[][]>('MERGE type::record($id) CONTENT $data', { id, data });
+    const recordId = typeof id === 'string' ? new StringRecordId(id) : id;
+    const res = await this.db.query<T[][]>('UPSERT $id MERGE $data', { id: recordId, data });
     return res[0][0];
   }
 
@@ -130,14 +131,12 @@ export class SurrealStore implements IStore {
   }
 
   async createEdge<T extends GraphEdge>(edge: T): Promise<T> {
-    const query = edge.id 
-      ? `RELATE type::record($from)->type::table($type)->type::record($to) SET id = $id, metadata = $metadata;`
-      : `RELATE type::record($from)->type::table($type)->type::record($to) SET metadata = $metadata;`;
-    const res = await this.db.query<T[][]>(query, {
-      from: edge.from,
-      to: edge.to,
-      type: edge.type,
-      id: edge.id,
+    const from = typeof edge.from === 'string' ? new StringRecordId(edge.from) : edge.from;
+    const to = typeof edge.to === 'string' ? new StringRecordId(edge.to) : edge.to;
+    
+    const res = await this.db.query<T[][]>(`RELATE $from->${edge.type}->$to CONTENT $metadata;`, {
+      from,
+      to,
       metadata: edge.metadata || {}
     });
     return res[0][0];

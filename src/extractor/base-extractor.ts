@@ -8,6 +8,10 @@ export abstract class BaseExtractor {
 
   abstract extract(ctx: ExtractorContext): ExtractionResult;
 
+  generateFileId(relativePath: string): string {
+    return `file:${relativePath.replace(/\W/g, '_')}`;
+  }
+
   postProcess(
     symbols: SymbolIR[], 
     edges: EdgeIR[], 

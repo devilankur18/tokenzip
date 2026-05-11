@@ -1,16 +1,19 @@
 import { Command } from 'commander';
 import fs from 'fs';
-import path from 'path';
-
 import { SurrealStore } from '../../storage/surreal/store.js';
 import { Indexer } from '../../engine/indexer.js';
+import { resolveDbPath } from '../resolve-db.js';
 
 export const resetCommand = new Command('reset')
-  .description('Reset the TokenZip database and remove all indexed data')
-  .option('--parse', 'Automatically parse the codebase after resetting')
+  .description('Remove the TokenZip database (wipes all indexed data)')
+  .option('--parse', 'Automatically re-index after resetting')
+  .addHelpText('after', `
+Examples:
+  $ tokenzip reset             # Wipe the database only
+  $ tokenzip reset --parse     # Wipe + rebuild in one step
+`)
   .action(async (options) => {
-    const repoPath = process.cwd();
-    const dbPath = repoPath.endsWith('.tokenzip') ? path.join(repoPath, 'db') : path.join(repoPath, '.tokenzip/db');
+    const { dbPath, repoPath } = resolveDbPath(process.cwd());
     
     console.log('Resetting TokenZip database...');
     
@@ -22,7 +25,7 @@ export const resetCommand = new Command('reset')
     }
 
     if (options.parse) {
-      console.log('\\n🚀 Regenerating database...');
+      console.log('\n🚀 Regenerating database...');
       const store = new SurrealStore(dbPath);
       await store.initialize();
       await store.migrate();

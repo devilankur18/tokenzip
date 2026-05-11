@@ -10,15 +10,31 @@ export class TypeScriptExtractor extends BaseExtractor {
     const edges: EdgeIR[] = [];
     const parseErrors: ParseError[] = [];
 
+    const fileId = this.generateFileId(ctx.relativePath);
+
     this.walk(ctx.tree.rootNode, {
+      'import_statement': (node) => {
+        const sourceNode = node.childForFieldName('source');
+        if (sourceNode) {
+          const source = sourceNode.text.replace(/['"]/g, '');
+          edges.push({
+            type: 'imports',
+            from: fileId,
+            to: `unresolved:${source}`,
+            metadata: { source },
+            isResolved: false
+          });
+        }
+      },
       'function_declaration': (node) => {
         const nameNode = node.childForFieldName('name');
         if (!nameNode) return;
         const name = nameNode.text;
+        const id = this.generateSymbolId(ctx.relativePath, name, 'function', node.startPosition.row + 1);
         
         symbols.push({
-          id: this.generateSymbolId(ctx.relativePath, name, 'function', node.startPosition.row + 1),
-          fileId: `file:${ctx.relativePath}`,
+          id,
+          fileId,
           name,
           kind: 'function',
           signature: ctx.content.slice(node.startIndex, node.endIndex).split('\\n')[0],
@@ -31,15 +47,18 @@ export class TypeScriptExtractor extends BaseExtractor {
           modifiers: [],
           metadata: {},
         });
+
+        this.extractCalls(node, id, edges);
       },
       'class_declaration': (node) => {
         const nameNode = node.childForFieldName('name');
         if (!nameNode) return;
         const name = nameNode.text;
+        const id = this.generateSymbolId(ctx.relativePath, name, 'class', node.startPosition.row + 1);
         
         symbols.push({
-          id: this.generateSymbolId(ctx.relativePath, name, 'class', node.startPosition.row + 1),
-          fileId: `file:${ctx.relativePath}`,
+          id,
+          fileId,
           name,
           kind: 'class',
           signature: ctx.content.slice(node.startIndex, node.endIndex).split('\\n')[0],
@@ -52,15 +71,18 @@ export class TypeScriptExtractor extends BaseExtractor {
           modifiers: [],
           metadata: {},
         });
+
+        this.extractCalls(node, id, edges);
       },
       'method_definition': (node) => {
         const nameNode = node.childForFieldName('name');
         if (!nameNode) return;
         const name = nameNode.text;
+        const id = this.generateSymbolId(ctx.relativePath, name, 'method', node.startPosition.row + 1);
         
         symbols.push({
-          id: this.generateSymbolId(ctx.relativePath, name, 'method', node.startPosition.row + 1),
-          fileId: `file:${ctx.relativePath}`,
+          id,
+          fileId,
           name,
           kind: 'method',
           signature: ctx.content.slice(node.startIndex, node.endIndex).split('\\n')[0],
@@ -73,10 +95,29 @@ export class TypeScriptExtractor extends BaseExtractor {
           modifiers: [],
           metadata: {},
         });
+
+        this.extractCalls(node, id, edges);
       },
     });
 
     return { symbols, edges, parseErrors };
+  }
+
+  private extractCalls(node: any, symbolId: string, edges: EdgeIR[]) {
+    this.walk(node, {
+      'call_expression': (callNode) => {
+        const fnNode = callNode.childForFieldName('function');
+        if (fnNode && fnNode.type === 'identifier') {
+          edges.push({
+            type: 'calls',
+            from: symbolId,
+            to: `unresolved_symbol:${fnNode.text}`,
+            metadata: { targetName: fnNode.text },
+            isResolved: false
+          });
+        }
+      }
+    });
   }
 
   private isExported(node: any): boolean {

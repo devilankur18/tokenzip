@@ -1,6 +1,8 @@
 import fs from 'fs';
 import path from 'path';
 import { IStore } from '../storage/interface.js';
+import { SurrealStore } from '../storage/surreal/store.js';
+import { GitExtractor } from '../extractor/git.js';
 import { ExtractorRegistry } from '../extractor/registry.js';
 import { contentHash } from '../utils/hash.js';
 import { Parser, Language } from 'web-tree-sitter';
@@ -8,10 +10,13 @@ import { StringRecordId } from 'surrealdb';
 
 const IGNORE_DIRS = new Set(['node_modules', '.git', 'dist', 'build', '.next', '.tokenzip']);
 
+import { EdgeIR } from '../extractor/types.js';
+
 export class Indexer {
   private store: IStore;
   private registry: ExtractorRegistry;
   private repoPath: string;
+  private unresolvedEdges: EdgeIR[] = [];
 
   constructor(store: IStore, repoPath: string) {
     this.store = store;
@@ -47,7 +52,7 @@ export class Indexer {
       const relativePath = path.relative(this.repoPath, filePath);
       const code = fs.readFileSync(filePath, 'utf8');
       const hash = contentHash(code);
-      const fileId = `file:${relativePath}`;
+      const fileId = `file:${relativePath.replace(/\W/g, '_')}`;
 
       // Check if file is already parsed and unmodified
       const existing = await this.store.getNode(fileId);
@@ -106,10 +111,26 @@ export class Indexer {
         });
       }
 
+      for (const edge of result.edges) {
+        this.unresolvedEdges.push(edge);
+      }
+
       parsed++;
     }
 
     console.log(`✅ Indexing complete. Parsed ${parsed} files.`);
+
+    // Git metadata extraction
+    if (this.store instanceof SurrealStore) {
+      const git = new GitExtractor(this.repoPath);
+      await git.extractHistory(this.store);
+    }
+    
+    if (this.unresolvedEdges.length > 0) {
+      console.log(`\n🔄 Resolving ${this.unresolvedEdges.length} edges...`);
+      await this.resolveEdges();
+      console.log(`✅ Edge resolution complete.`);
+    }
   }
 
   private getAllFiles(dirPath: string, arrayOfFiles: string[] = []): string[] {
@@ -123,5 +144,62 @@ export class Indexer {
       }
     });
     return arrayOfFiles;
+  }
+
+  private async resolveEdges(): Promise<void> {
+    for (const edge of this.unresolvedEdges) {
+      if (edge.type === 'calls') {
+        const targetName = edge.metadata?.targetName as string;
+        if (!targetName) continue;
+        
+        // Exact name match
+        const q = `SELECT * FROM symbol WHERE name = $targetName LIMIT 5`;
+        const matches = await this.store.query<any>(q, { targetName });
+        
+        for (const target of matches) {
+          await this.store.createEdge({
+            type: 'calls',
+            from: edge.from,
+            to: target.id,
+          } as any);
+        }
+      } else if (edge.type === 'imports') {
+        const source = edge.metadata?.source as string;
+        if (!source) continue;
+        
+        if (source.startsWith('.')) {
+          // Relative path
+          const fromFileId = edge.from.replace('file:', '');
+          const dir = path.dirname(fromFileId);
+          const resolvedPath = path.join(dir, source);
+          
+          const q = `SELECT id FROM file WHERE path CONTAINS $resolvedPath LIMIT 1`;
+          const matches = await this.store.query<any>(q, { resolvedPath });
+          
+          for (const match of matches) {
+            await this.store.createEdge({
+              type: 'imports',
+              from: edge.from,
+              to: match.id,
+            } as any);
+          }
+        } else {
+          // Module/Package
+          const modId = `module:${source.replace(/\W/g, '_')}`;
+          await this.store.updateNode(modId, {
+            id: modId,
+            type: 'module',
+            name: source,
+          } as any);
+          
+          await this.store.createEdge({
+            type: 'imports',
+            from: edge.from,
+            to: modId,
+          } as any);
+        }
+      }
+    }
+    this.unresolvedEdges = [];
   }
 }

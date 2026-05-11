@@ -14,12 +14,12 @@ DEFINE FIELD OVERWRITE stats ON repository TYPE object DEFAULT { files: 0, modul
 
 DEFINE TABLE OVERWRITE module SCHEMAFULL;
 DEFINE FIELD OVERWRITE name ON module TYPE string;
-DEFINE FIELD OVERWRITE path ON module TYPE string;
-DEFINE FIELD OVERWRITE manifest_type ON module TYPE string;
-DEFINE FIELD OVERWRITE language ON module TYPE string;
+DEFINE FIELD OVERWRITE path ON module TYPE option<string>;
+DEFINE FIELD OVERWRITE manifest_type ON module TYPE option<string>;
+DEFINE FIELD OVERWRITE language ON module TYPE option<string>;
 DEFINE FIELD OVERWRITE is_root ON module TYPE bool DEFAULT false;
-DEFINE FIELD OVERWRITE metadata ON module TYPE object;
-DEFINE FIELD OVERWRITE repository_id ON module TYPE record<repository>;
+DEFINE FIELD OVERWRITE metadata ON module TYPE option<object>;
+DEFINE FIELD OVERWRITE repository_id ON module TYPE option<record<repository>>;
 
 DEFINE TABLE OVERWRITE file SCHEMAFULL;
 DEFINE FIELD OVERWRITE path ON file TYPE string;
@@ -58,13 +58,13 @@ DEFINE FIELD OVERWRITE metadata ON symbol TYPE object;
 
 DEFINE TABLE OVERWRITE commit SCHEMAFULL;
 DEFINE FIELD OVERWRITE hash ON commit TYPE string;
-DEFINE FIELD OVERWRITE short_hash ON commit TYPE string;
+DEFINE FIELD OVERWRITE short_hash ON commit TYPE option<string>;
 DEFINE FIELD OVERWRITE message ON commit TYPE string;
 DEFINE FIELD OVERWRITE author ON commit TYPE string;
-DEFINE FIELD OVERWRITE email ON commit TYPE string;
+DEFINE FIELD OVERWRITE email ON commit TYPE option<string>;
 DEFINE FIELD OVERWRITE date ON commit TYPE datetime;
-DEFINE FIELD OVERWRITE branch ON commit TYPE string;
-DEFINE FIELD OVERWRITE tags ON commit TYPE array;
+DEFINE FIELD OVERWRITE branch ON commit TYPE option<string>;
+DEFINE FIELD OVERWRITE tags ON commit TYPE array DEFAULT [];
 
 DEFINE TABLE OVERWRITE dependency SCHEMAFULL;
 DEFINE FIELD OVERWRITE module_id ON dependency TYPE record<module>;

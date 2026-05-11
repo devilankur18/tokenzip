@@ -1,15 +1,19 @@
 import { Command } from 'commander';
 import { SurrealStore } from '../../storage/surreal/store.js';
 import { Indexer } from '../../engine/indexer.js';
-import path from 'path';
+import { resolveDbPath } from '../resolve-db.js';
 
 export const parseCommand = new Command('parse')
-  .description('Parse the codebase and index it into the graph database')
-  .option('--full', 'Perform a full parse instead of incremental')
+  .description('Parse the codebase and build the knowledge graph database')
+  .option('--full', 'Full re-index (clears existing data and re-parses all files)')
+  .addHelpText('after', `
+Examples:
+  $ tokenzip parse           # Incremental — only re-indexes changed files
+  $ tokenzip parse --full    # Full wipe and re-index from scratch
+`)
   .action(async (options) => {
     console.log('Starting parse command...');
-    const repoPath = process.cwd();
-    const dbPath = repoPath.endsWith('.tokenzip') ? path.join(repoPath, 'db') : path.join(repoPath, '.tokenzip/db');
+    const { dbPath, repoPath } = resolveDbPath(process.cwd());
 
     const store = new SurrealStore(dbPath);
     await store.initialize();

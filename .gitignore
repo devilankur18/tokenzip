@@ -1,6 +1,13 @@
-db/*
-.tokenzip/*
-dist/*
-node_modules/*
-parser.mjs
-tokenzip-poc.js
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# TokenZip database
+db/
+.tokenzip/db/
+
+# Misc
+*.log
+.DS_Store

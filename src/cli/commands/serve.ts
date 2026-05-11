@@ -1,15 +1,28 @@
 import { Command } from 'commander';
 import { SurrealStore } from '../../storage/surreal/store.js';
 import { createMcpServer } from '../../mcp/server.js';
-import path from 'path';
+import { resolveDbPath } from '../resolve-db.js';
 
 export const serveCommand = new Command('serve')
-  .description('Start the TokenZip MCP Server')
-  .option('--cwd <dir>', 'Working directory', process.cwd())
-  .action(async (options) => {
-    const repoPath = path.resolve(options.cwd);
-    const dbPath = path.join(repoPath, '.tokenzip/db');
+  .description('Start the TokenZip MCP server (exposes the graph to AI copilots)')
+  .option('--cwd <dir>', 'Root of the repository to serve', process.cwd())
+  .addHelpText('after', `
+Examples:
+  $ tokenzip serve                          # Serve the current directory
+  $ tokenzip serve --cwd /path/to/repo      # Serve a specific repo
 
+AI Copilot config (Claude Desktop):
+  {
+    "mcpServers": {
+      "tokenzip": {
+        "command": "tokenzip",
+        "args": ["serve", "--cwd", "/path/to/repo"]
+      }
+    }
+  }
+`)
+  .action(async (options) => {
+    const { dbPath, repoPath } = resolveDbPath(options.cwd);
     const store = new SurrealStore(dbPath);
     await store.initialize();
     
