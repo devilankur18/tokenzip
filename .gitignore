@@ -1,0 +1,6 @@
+db/*
+.tokenzip/*
+dist/*
+node_modules/*
+parser.mjs
+tokenzip-poc.js
