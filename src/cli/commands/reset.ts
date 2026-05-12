@@ -7,15 +7,14 @@ import { resolveDbPath } from '../resolve-db.js';
 export const resetCommand = new Command('reset')
   .description('Remove the TokenZip database (wipes all indexed data)')
   .option('--parse', 'Automatically re-index after resetting')
-  .option('--cwd <dir>', 'Working directory', process.cwd())
   .addHelpText('after', `
 Examples:
   $ tokenzip reset             # Wipe the database only
   $ tokenzip reset --parse     # Wipe + rebuild in one step
-  $ tokenzip reset --parse --cwd /path/to/repo
 `)
-  .action(async (options) => {
-    const { dbPath, repoPath } = resolveDbPath(options.cwd);
+  .action(async (options, command) => {
+    const globalOptions = command.parent.opts();
+    const { dbPath, repoPath } = resolveDbPath(globalOptions.cwd);
     
     console.log('Resetting TokenZip database...');
     

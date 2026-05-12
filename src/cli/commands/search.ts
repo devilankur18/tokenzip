@@ -5,14 +5,12 @@ import { resolveDbPath } from '../resolve-db.js';
 export const searchCommand = new Command('search')
   .description('Search for symbols by name across the indexed codebase')
   .argument('<query>', 'Symbol name or partial name to search (case-insensitive)')
-  .option('--cwd <dir>', 'Root of the repository to search', process.cwd())
   .option('--limit <n>', 'Maximum number of results', '10')
   .addHelpText('after', `
 Examples:
   $ tokenzip search useEffect              # Find all 'useEffect' usages
   $ tokenzip search handleAuth             # Partial match on any symbol
   $ tokenzip search db --limit 5          # Limit results
-  $ tokenzip search init --cwd /my/repo   # Search a specific repo
 
 Output fields:
   SYMBOL      Symbol name

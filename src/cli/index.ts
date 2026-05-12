@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { Command } from 'commander';
+import path from 'path';
 import { initCommand } from './commands/init.js';
 import { parseCommand } from './commands/parse.js';
 import { serveCommand } from './commands/serve.js';
@@ -21,7 +22,12 @@ program
     '  tokenzip mcp       Directly test MCP tools\n' +
     '  tokenzip serve     Start the MCP server for AI copilots'
   )
-  .version('2.0.0');
+  .version('2.0.0')
+  .option('--cwd <dir>', 'Working directory', process.env.TOKENZIP_CWD || process.cwd())
+  .hook('preAction', (thisCommand) => {
+    const cwd = thisCommand.opts().cwd;
+    console.error(`📂 Working Directory: ${path.resolve(cwd)}`);
+  });
 
 program.addCommand(initCommand);
 program.addCommand(parseCommand);

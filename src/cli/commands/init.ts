@@ -8,9 +8,9 @@ const { resolve } = path;
 
 export const initCommand = new Command('init')
   .description('Initialize TokenZip in the current directory')
-  .option('--cwd <dir>', 'Directory to initialize', process.cwd())
-  .action(async (options) => {
-    const cwd = resolve(options.cwd);
+  .action(async (options, command) => {
+    const globalOptions = command.parent.opts();
+    const cwd = resolve(globalOptions.cwd);
     const tokenzipDir = path.join(cwd, '.tokenzip');
     
     if (!fs.existsSync(tokenzipDir)) {

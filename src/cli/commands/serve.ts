@@ -5,7 +5,6 @@ import { resolveDbPath } from '../resolve-db.js';
 
 export const serveCommand = new Command('serve')
   .description('Start the TokenZip MCP server (exposes the graph to AI copilots)')
-  .option('--cwd <dir>', 'Root of the repository to serve', process.cwd())
   .addHelpText('after', `
 Examples:
   $ tokenzip serve                          # Serve the current directory

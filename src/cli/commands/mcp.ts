@@ -8,7 +8,6 @@ export const mcpCommand = new Command('mcp')
   .description('Directly test MCP tools from the CLI')
   .argument('<tool>', 'Tool name (e.g., query_symbol, get_file_symbols)')
   .argument('[args...]', 'Arguments for the tool in key=value format (e.g., symbol_name=myFunc)')
-  .option('--cwd <dir>', 'Root of the repository', process.cwd())
   .option('--budget <tokens>', 'Token budget for the response', '8000')
   .addHelpText('after', `
 Available Tools:
@@ -25,8 +24,9 @@ Examples:
   $ tokenzip mcp get_file_symbols file_path=src/index.ts
   $ tokenzip mcp find_references symbol_name=Indexer
 `)
-  .action(async (toolName, argsArray, options) => {
-    const { dbPath, repoPath } = resolveDbPath(options.cwd);
+  .action(async (toolName, argsArray, options, command) => {
+    const globalOptions = command.parent.opts();
+    const { dbPath, repoPath } = resolveDbPath(globalOptions.cwd);
     const store = new SurrealStore(dbPath);
     await store.initialize();
 

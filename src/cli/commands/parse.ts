@@ -11,9 +11,10 @@ Examples:
   $ tokenzip parse           # Incremental — only re-indexes changed files
   $ tokenzip parse --full    # Full wipe and re-index from scratch
 `)
-  .action(async (options) => {
+  .action(async (options, command) => {
     console.log('Starting parse command...');
-    const { dbPath, repoPath } = resolveDbPath(process.cwd());
+    const globalOptions = command.parent.opts();
+    const { dbPath, repoPath } = resolveDbPath(globalOptions.cwd);
 
     const store = new SurrealStore(dbPath);
     await store.initialize();
