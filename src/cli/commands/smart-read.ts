@@ -50,6 +50,10 @@ export const smartReadCommand = new Command('smart-read')
           options.docs
         );
 
+        if ((result as any).symbol_count === 0) {
+          console.warn(`⚠️  Warning: No symbols found in index for ${targetFile.path}. Saving will be 0%. Try "tokenzip reset --parse" first.`);
+        }
+
         console.log(result.content);
         
         const originalContent = fs.readFileSync(absPath, 'utf8');

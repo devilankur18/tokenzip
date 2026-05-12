@@ -201,8 +201,7 @@ export class Indexer {
       try {
         await this.store.batch(batchQuery, vars);
       } catch (e: any) {
-        // Silently fail or log to a dedicated logger in production
-        // console.error(`❌ Error saving ${filePath}: ${e.message}`);
+        console.error(`\n❌ DB Error saving ${filePath}: ${e.message}`);
       }
     } else {
       await this.store.createNode({ id: fileIdStr, ...vars } as any);
