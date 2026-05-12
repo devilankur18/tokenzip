@@ -11,6 +11,7 @@ import { smartReadCommand } from './commands/smart-read.js';
 import { mcpCommand } from './commands/mcp.js';
 import { reportCommand } from './commands/report.js';
 import { doctorCommand } from './commands/doctor.js';
+import { debugCommand } from './commands/debug.js';
 
 const program = new Command();
 
@@ -43,6 +44,7 @@ program.addCommand(smartReadCommand);
 program.addCommand(mcpCommand);
 program.addCommand(doctorCommand);
 program.addCommand(reportCommand);
+program.addCommand(debugCommand);
 
 program.parseAsync(process.argv).catch(err => {
   console.error(err);
