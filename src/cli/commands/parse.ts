@@ -18,10 +18,12 @@ Examples:
     const store = new SurrealStore(dbPath);
     await store.initialize();
     
+    console.log(`\n🚀 TokenZip indexing: ${repoPath}`);
     if (options.full) {
-      console.log('Clearing old graph for full parse...');
+      console.log('🧹 Mode: Full re-index (clears existing data)');
       await store.clear();
     } else {
+      console.log('🔄 Mode: Incremental index');
       await store.migrate();
     }
 

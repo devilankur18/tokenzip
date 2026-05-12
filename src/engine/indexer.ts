@@ -41,25 +41,41 @@ export class Indexer {
 
   private isIgnored(filePath: string): boolean {
     const relativePath = path.relative(this.repoPath, filePath);
-    
-    // Quick check for standard ignored dirs in the path
+    if (!relativePath) return false;
+
     const parts = relativePath.split(path.sep);
+    
+    // Quick check for standard ignored dirs
     if (parts.some(part => IGNORE_DIRS.has(part))) return true;
 
-    // Basic glob-to-regex conversion for .gitignore patterns
-    // This handles simple patterns like "*.log", "dist/", "node_modules"
     for (const pattern of this.ignorePatterns) {
-      let regexStr = pattern
-        .replace(/\./g, '\\.')
-        .replace(/\*/g, '.*')
-        .replace(/\?/g, '.');
+      // Normalize pattern
+      const p = pattern.startsWith('/') ? pattern.slice(1) : pattern;
       
+      // Handle directory-only patterns (ending in /)
       if (pattern.endsWith('/')) {
-        regexStr += '.*';
+        const dirPattern = p.slice(0, -1);
+        if (parts.includes(dirPattern)) return true;
+        if (relativePath.startsWith(p)) return true;
       }
       
-      const regex = new RegExp(`(^|/)${regexStr}($|/)`);
-      if (regex.test(relativePath)) return true;
+      // Simple exact match for any path segment
+      if (parts.includes(p)) return true;
+
+      // Handle simple globs like *.log or build/*
+      if (p.includes('*')) {
+        const regexStr = p
+          .replace(/\./g, '\\.')
+          .replace(/\*\*/g, '.*')
+          .replace(/\*/g, '[^/]*')
+          .replace(/\?/g, '.');
+        
+        const regex = new RegExp(`(^|/)${regexStr}($|/)`);
+        if (regex.test(relativePath)) return true;
+      } else {
+        // Path prefix match (e.g. "dist" matches "dist/main.js")
+        if (relativePath === p || relativePath.startsWith(p + path.sep)) return true;
+      }
     }
 
     return false;
@@ -104,9 +120,14 @@ export class Indexer {
 
     process.stdout.write('🔍 Scanning files... ');
     const allFiles = this.getAllFiles(this.repoPath);
-    console.log(`found ${allFiles.length} files.`);
+    process.stdout.write(`found ${allFiles.length} files.\n`);
 
-    console.log(`\n🚀 Indexing ${allFiles.length} files...`);
+    if (allFiles.length === 0) {
+      console.log('⚠️  No files found to index. Check your directory or .gitignore patterns.');
+      return;
+    }
+
+    console.log(`🚀 Indexing ${allFiles.length} files...`);
 
     let parsed = 0;
     let skipped = 0;
@@ -122,7 +143,9 @@ export class Indexer {
         process.stdout.write(`\r   [${percent}%] Processing: ${relativePath.padEnd(60).slice(0, 60)}...`);
       }
 
-      if (this.isIgnored(filePath) || !this.registry.supportsFile(filePath)) {
+      // Files are already filtered by isIgnored and supportsFile in getAllFiles
+      // but we double check here just in case of any dynamic changes or for unmodified checks
+      if (!this.registry.supportsFile(filePath)) {
         skipped++;
         continue;
       }
@@ -257,11 +280,19 @@ export class Indexer {
       const files = fs.readdirSync(dirPath);
       files.forEach((file) => {
         const fullPath = path.join(dirPath, file);
+        
+        // Skip if this file or directory is ignored
+        if (this.isIgnored(fullPath)) return;
+
         try {
-          if (fs.statSync(fullPath).isDirectory()) {
-            if (!IGNORE_DIRS.has(file)) this.getAllFiles(fullPath, arrayOfFiles);
+          const stat = fs.statSync(fullPath);
+          if (stat.isDirectory()) {
+            this.getAllFiles(fullPath, arrayOfFiles);
           } else {
-            arrayOfFiles.push(fullPath);
+            // Only add files that are supported by at least one extractor
+            if (this.registry.supportsFile(fullPath)) {
+              arrayOfFiles.push(fullPath);
+            }
           }
         } catch (e) {
           // Skip individual files/dirs with permission issues

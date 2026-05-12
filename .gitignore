@@ -11,3 +11,5 @@ db/
 # Misc
 *.log
 .DS_Store
+data/
+.tokenzip/*
