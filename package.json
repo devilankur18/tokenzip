@@ -1,7 +1,7 @@
 {
-  "name": "@ankur/tokenzip",
-  "version": "2.0.0",
-  "description": "Transform any codebase into a queryable knowledge graph. Search symbols, trace call stacks, and expose your repo structure to AI copilots via MCP.",
+  "name": "tokenzip",
+  "version": "1.0.0",
+  "description": "TokenZip — Reduce AI coding token costs by 90% with a persistent, queryable code intelligence graph that gives agents deep repo awareness across files, symbols, dependencies, and docs.",
   "license": "MIT",
   "author": "Ankur Agarwal",
   "homepage": "https://github.com/ankur/tokenzip",

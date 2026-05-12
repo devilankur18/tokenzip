@@ -5,7 +5,7 @@
 **Transform any codebase into a queryable knowledge graph.**  
 Search symbols, trace call stacks, expose your repo to AI copilots — all from the terminal.
 
-[![npm version](https://img.shields.io/npm/v/@ankur/tokenzip.svg)](https://www.npmjs.com/package/@ankur/tokenzip)
+[![npm version](https://img.shields.io/npm/v/tokenzip.svg)](https://www.npmjs.com/package/tokenzip)
 [![Node.js >= 18](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg)](https://nodejs.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
@@ -46,7 +46,7 @@ GIT_HISTORY:
 ### Global install (recommended)
 
 ```bash
-npm install -g @ankur/tokenzip
+npm install -g tokenzip
 ```
 
 You can then run `tokenzip` anywhere.
@@ -54,7 +54,7 @@ You can then run `tokenzip` anywhere.
 ### Local install (per project)
 
 ```bash
-npm install --save-dev @ankur/tokenzip
+npm install --save-dev tokenzip
 npx tokenzip init
 ```
 
@@ -89,7 +89,7 @@ tokenzip search "db" --l## Features
 ## Install
 
 ```bash
-npm install -g @ankur/tokenzip
+npm install -g tokenzip
 ```
 
 ---
@@ -272,14 +272,32 @@ ence tools
 
 ## Contributing
 
+## Contributing
+
+To test your changes locally using the `tokenzip` command:
+
+1. **Build the project**:
+   ```bash
+   npm run build
+   ```
+
+2. **Link the package** (one-time setup):
+   ```bash
+   npm link
+   ```
+   *Note: This makes the `tokenzip` command available globally, pointing to your local source.*
+
+3. **Run commands directly**:
+   ```bash
+   tokenzip init
+   tokenzip parse
+   tokenzip search "Indexer"
+   ```
+
+**Alternative (no link required):**
+If you don't want to link globally, you can use `npx .`:
 ```bash
-git clone https://github.com/devilankur18/tokenzip
-cd tokenzip
-npm install
-npm run build
-node dist/cli/index.js init
-node dist/cli/index.js parse
-node dist/cli/index.js search "Indexer"
+npx . parse
 ```
 
 ---
