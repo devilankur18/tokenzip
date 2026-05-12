@@ -316,20 +316,48 @@ export class TypeScriptExtractor extends BaseExtractor {
   }
 
   private extractVariables(node: any, symbols: any[], fileId: string, ctx: any, edges: any[], iifeBody?: any) {
-    const declarators = node.descendantsOfType('variable_declarator');
+    const declarators = node.children.filter((c: any) => c.type === 'variable_declarator');
     for (const decl of declarators) {
       const nameNode = decl.childForFieldName('name');
       if (!nameNode) continue;
       const name = nameNode.text;
-      const id = this.generateSymbolId(ctx.relativePath, name, 'variable', decl.startPosition.row + 1);
+      const valueNode = decl.childForFieldName('value');
+      let kind = 'variable';
+      if (valueNode) {
+        let effectiveValue = valueNode;
+        // Unwrap common React wrappers: React.memo(() => ...), forwardRef(() => ...)
+        while (effectiveValue.type === 'call_expression') {
+          const fnNode = effectiveValue.childForFieldName('function');
+          const fnText = fnNode?.text || '';
+          if (['memo', 'forwardRef', 'React.memo', 'React.forwardRef'].some(w => fnText.includes(w))) {
+            const args = effectiveValue.childForFieldName('arguments');
+            const firstArg = args?.namedChild(0);
+            if (firstArg) {
+              effectiveValue = firstArg;
+            } else {
+              break;
+            }
+          } else {
+            break;
+          }
+        }
+
+        if (['arrow_function', 'function_expression'].includes(effectiveValue.type)) {
+          kind = 'function';
+        } else if (effectiveValue.type === 'class_expression') {
+          kind = 'class';
+        }
+      }
+
+      const id = this.generateSymbolId(ctx.relativePath, name, kind, decl.startPosition.row + 1);
       
-      let isInternal = this.calculateInternal(node, iifeBody);
+      let isInternal = this.calculateInternal(decl, iifeBody);
 
       symbols.push({
         id,
         fileId,
         name,
-        kind: 'variable',
+        kind,
         signature: this.getSignature(node, ctx.content),
         isInternal,
         startLine: node.startPosition.row + 1,
@@ -415,16 +443,49 @@ export class TypeScriptExtractor extends BaseExtractor {
   }
 
   private getSignature(node: any, content: string): string {
+    // For function/class declarations, they usually have a 'body' or 'statement_block'
     const body = node.childForFieldName('body') || node.descendantsOfType('statement_block')[0];
+    
+    // Special handling for variables that are functions
+    if (['variable_declaration', 'lexical_declaration'].includes(node.type)) {
+      const decl = node.children.find((c: any) => c.type === 'variable_declarator');
+      const value = decl?.childForFieldName('value');
+      if (value) {
+        let effectiveValue = value;
+        // Unwrap React.memo, etc.
+        while (effectiveValue.type === 'call_expression') {
+          const fnNode = effectiveValue.childForFieldName('function');
+          const fnText = fnNode?.text || '';
+          if (['memo', 'forwardRef', 'React.memo', 'React.forwardRef'].some(w => fnText.includes(w))) {
+            const args = effectiveValue.childForFieldName('arguments');
+            const firstArg = args?.namedChild(0);
+            if (firstArg) effectiveValue = firstArg;
+            else break;
+          } else {
+            break;
+          }
+        }
+
+        if (['arrow_function', 'function_expression', 'class_expression'].includes(effectiveValue.type)) {
+          const valBody = effectiveValue.childForFieldName('body') || effectiveValue.descendantsOfType('statement_block')[0];
+          if (valBody) {
+            return content.slice(node.startIndex, valBody.startIndex).trim();
+          }
+        }
+      }
+      
+      // If it's a simple variable, we might want to truncate if it's too long
+      const full = content.slice(node.startIndex, node.endIndex).trim();
+      if (full.length > 200) {
+        return full.split('\n')[0].split(';')[0].trim() + ' ...';
+      }
+      return full;
+    }
+
     if (body) {
       return content.slice(node.startIndex, body.startIndex).trim();
     }
     
-    // For variables, return the whole declaration. The interface strategy will truncate if too large.
-    if (['variable_declaration', 'lexical_declaration'].includes(node.type)) {
-      return content.slice(node.startIndex, node.endIndex).trim();
-    }
-
     // Fallback to first line if no body found
     return content.slice(node.startIndex, node.endIndex).split('\n')[0];
   }

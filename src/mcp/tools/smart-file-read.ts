@@ -208,44 +208,49 @@ async function skeletonStrategy(relPath: string, absPath: string, fileId: string
   const symbols = preFetchedSymbols || await store.query<any>('SELECT * FROM symbol WHERE fileId = $fileId ORDER BY startLine ASC', { fileId: recordId });
   const lines = fileCache.getLines(absPath);
   
-  const resultLines: string[] = [];
-  
-  // Mark lines that are part of a function/method body OR comment
   const hiddenLines = new Set<number>();
+  
+  // 1. Mark lines to hide (bodies of functions/methods and docstrings)
   for (const sym of symbols) {
+    // Hide docstrings if requested
     if (!includeDocs && sym.docStartLine && sym.docEndLine) {
       for (let i = sym.docStartLine; i <= sym.docEndLine; i++) {
         hiddenLines.add(i);
       }
     }
     
-    if (['function', 'method', 'class'].includes(sym.kind) && sym.endLine > sym.startLine) {
-      // Check if it has any "structural" children (not just variables)
-      const hasStructuralChild = symbols.some(
-        (other) => 
-          other.id !== sym.id && 
-          ['class', 'function', 'method', 'interface', 'type'].includes(other.kind) &&
-          other.startLine > sym.startLine && 
-          other.endLine < sym.endLine
-      );
-      
-      if (!hasStructuralChild) {
-        for (let i = sym.startLine + 1; i < sym.endLine; i++) {
-          hiddenLines.add(i);
-        }
+    // Hide bodies of functions and methods
+    if (['function', 'method'].includes(sym.kind) && sym.endLine > sym.startLine) {
+      for (let i = sym.startLine + 1; i < sym.endLine; i++) {
+        hiddenLines.add(i);
       }
     }
   }
 
+  // 2. PROTECT structural lines (signatures of nested symbols)
+  // We want to make sure that even if a line is inside a hidden body, 
+  // if it's the START of another symbol, we show it.
+  for (const sym of symbols) {
+    if (['function', 'method', 'class', 'interface', 'type', 'enum'].includes(sym.kind)) {
+      hiddenLines.delete(sym.startLine);
+      // For single-line symbols, endLine is the same as startLine
+      if (sym.endLine > sym.startLine) {
+        // We keep the closing brace visible too
+        hiddenLines.delete(sym.endLine);
+      }
+    }
+  }
+
+  const resultLines: string[] = [];
   let inHiddenBlock = false;
+  
   for (let i = 1; i <= lines.length; i++) {
     if (hiddenLines.has(i)) {
       if (!inHiddenBlock) {
-        // Only show implementation hidden if it's not just a comment
-        const isComment = symbols.some(s => s.docStartLine <= i && s.docEndLine >= i);
-        const isBody = !isComment;
-        if (isBody) {
-           resultLines.push('    /* [body] */');
+        // Find if this line is part of a docstring or a body
+        const isDoc = symbols.some(s => s.docStartLine <= i && s.docEndLine >= i);
+        if (!isDoc) {
+          resultLines.push('    /* [body] */');
         }
         inHiddenBlock = true;
       }
