@@ -8,9 +8,11 @@ import { contentHash } from '../utils/hash.js';
 import { Parser, Language } from 'web-tree-sitter';
 import { StringRecordId } from 'surrealdb';
 
-const IGNORE_DIRS = new Set(['node_modules', '.git', 'dist', 'build', '.next', '.tokenzip']);
-
 import { EdgeIR } from '../extractor/types.js';
+import { Worker } from 'node:worker_threads';
+import os from 'node:os';
+
+const IGNORE_DIRS = new Set(['node_modules', '.git', 'dist', 'build', '.next', '.tokenzip']);
 
 export class Indexer {
   private store: IStore;
@@ -18,11 +20,13 @@ export class Indexer {
   private repoPath: string;
   private unresolvedEdges: EdgeIR[] = [];
   private ignorePatterns: string[] = [];
+  private concurrency: number;
 
-  constructor(store: IStore, repoPath: string) {
+  constructor(store: IStore, repoPath: string, concurrency?: number) {
     this.store = store;
     this.registry = new ExtractorRegistry();
     this.repoPath = repoPath;
+    this.concurrency = concurrency || Math.max(1, os.cpus().length - 1);
     this.loadGitIgnore();
   }
 
@@ -81,6 +85,85 @@ export class Indexer {
     return false;
   }
 
+  private async saveResult(msg: any, repoId: string): Promise<void> {
+    const { filePath, hash, result, codeLength, lineCount, language, ext } = msg;
+    const relativePath = path.relative(this.repoPath, filePath);
+    const fileId = `file:${relativePath.replace(/\W/g, '_')}`;
+
+    // Identify/Create Module
+    const dirName = path.dirname(relativePath);
+    let moduleId: string | null = null;
+    if (dirName !== '.') {
+      moduleId = `module:${dirName.replace(/\W/g, '_')}`;
+      await this.store.createNode({
+        id: moduleId,
+        type: 'module',
+        name: path.basename(dirName),
+        path: dirName,
+      } as any);
+      await this.store.createEdge({ type: 'contains', from: repoId, to: moduleId } as any);
+    }
+
+    // Check if file is already parsed and unmodified
+    const existing = await this.store.getNode(fileId);
+    if (existing && existing.content_hash === hash) {
+      return; // Unmodified
+    }
+
+    const publicSymbols = result.symbols.filter((s: any) => {
+      if (s.isInternal && s.kind === 'variable') return false;
+      return true;
+    });
+
+    // Clean old symbols and edges
+    await this.store.query('DELETE symbol WHERE fileId = $fileId', { fileId: new StringRecordId(fileId) });
+    await this.store.deleteNode(fileId);
+
+    // Create file node
+    await this.store.createNode({
+      id: fileId,
+      type: 'file',
+      path: relativePath,
+      content_hash: hash,
+      size_bytes: codeLength,
+      language: language,
+      ext: ext,
+      line_count: lineCount,
+      parse_status: result.parseErrors.length === 0 ? 'parsed' : 'partial',
+      last_parsed: new Date(),
+      module_id: moduleId ? new StringRecordId(moduleId) : null,
+    } as any);
+
+    // Link Repo/Module -> File
+    await this.store.createEdge({
+      type: 'contains',
+      from: moduleId ?? repoId,
+      to: fileId
+    } as any);
+
+    // Insert new symbols
+    for (const symbol of publicSymbols) {
+      const fullSymbol = {
+        ...symbol,
+        type: 'symbol',
+        fileId: new StringRecordId(fileId)
+      } as any;
+      delete fullSymbol.isInternal;
+
+      await this.store.createNode(fullSymbol);
+      
+      await this.store.createEdge({
+        type: 'contains',
+        from: fileId,
+        to: symbol.id
+      } as any);
+    }
+
+    for (const edge of result.edges) {
+      this.unresolvedEdges.push(edge);
+    }
+  }
+
   async indexCodebase(): Promise<void> {
     await Parser.init();
     // WASM grammar is part of the tokenzip package — resolve relative to this file's location.
@@ -127,129 +210,92 @@ export class Indexer {
       return;
     }
 
-    console.log(`🚀 Indexing ${allFiles.length} files...`);
+    console.log(`\n🚀 Indexing ${allFiles.length} files using ${this.concurrency} cores...`);
 
     let parsed = 0;
     let skipped = 0;
     let startTime = Date.now();
 
-    for (let i = 0; i < allFiles.length; i++) {
-      const filePath = allFiles[i];
-      const relativePath = path.relative(this.repoPath, filePath);
+    // Initialize worker pool
+    const workers: Worker[] = [];
+    const workerCandidates = [
+      path.resolve(selfDir, 'worker.js'),               // Same dir (e.g. in dist/engine/)
+      path.resolve(selfDir, 'engine/worker.js'),        // Nested (e.g. in dist/)
+      path.resolve(selfDir, '../engine/worker.js'),     // Parent then nested (e.g. in dist/cli/)
+      path.resolve(selfDir, '../worker.js'),            // Parent (e.g. in dist/cli/)
+    ];
+    const workerScript = workerCandidates.find(p => fs.existsSync(p));
 
-      // Interactive progress line
-      if (i % 10 === 0 || i === allFiles.length - 1) {
-        const percent = Math.round(((i + 1) / allFiles.length) * 100);
+    if (!workerScript) {
+      throw new Error(`Could not find worker.js. Tried:\n  ${workerCandidates.join('\n  ')}`);
+    }
+    
+    for (let i = 0; i < this.concurrency; i++) {
+      const worker = new Worker(workerScript);
+      worker.postMessage({ type: 'init', wasmPath });
+      workers.push(worker);
+    }
+
+    // Wait for all workers to be ready
+    await Promise.all(workers.map(w => new Promise(resolve => {
+      w.once('message', (msg) => {
+        if (msg.type === 'ready') resolve(true);
+        else throw new Error(`Worker failed to initialize: ${msg.error}`);
+      });
+    })));
+
+    // Task queue
+    const queue = [...allFiles];
+    let active = 0;
+    let dbQueue: Promise<any> = Promise.resolve();
+
+    const processQueue = () => new Promise<void>((resolve, reject) => {
+      const next = async (worker: Worker) => {
+        if (queue.length === 0) {
+          if (active === 0) {
+            // Wait for final DB writes to complete
+            dbQueue.then(() => resolve()).catch(reject);
+          }
+          return;
+        }
+
+        const filePath = queue.shift()!;
+        active++;
+        
+        const relativePath = path.relative(this.repoPath, filePath);
+        const percent = Math.round(((allFiles.length - queue.length) / allFiles.length) * 100);
         process.stdout.write(`\r   [${percent}%] Processing: ${relativePath.padEnd(60).slice(0, 60)}...`);
-      }
 
-      // Files are already filtered by isIgnored and supportsFile in getAllFiles
-      // but we double check here just in case of any dynamic changes or for unmodified checks
-      if (!this.registry.supportsFile(filePath)) {
-        skipped++;
-        continue;
-      }
-
-      const code = fs.readFileSync(filePath, 'utf8');
-      const hash = contentHash(code);
-      const fileId = `file:${relativePath.replace(/\W/g, '_')}`;
-
-      // Identify/Create Module
-      const dirName = path.dirname(relativePath);
-      let moduleId: string | null = null;
-      if (dirName !== '.') {
-        moduleId = `module:${dirName.replace(/\W/g, '_')}`;
-        await this.store.createNode({
-          id: moduleId,
-          type: 'module',
-          name: path.basename(dirName),
-          path: dirName,
-        } as any);
-        await this.store.createEdge({ type: 'contains', from: repoId, to: moduleId } as any);
-      }
-
-      // Check if file is already parsed and unmodified
-      const existing = await this.store.getNode(fileId);
-      if (existing && existing.content_hash === hash) {
-        continue; // Unmodified
-      }
-
-      let tree;
-      try {
-        tree = parser.parse(code);
-      } catch (e) {
-        continue;
-      }
-
-      const extractor = this.registry.getExtractor(filePath);
-      if (!extractor || !tree) continue;
-
-      const ctx = {
-        filePath,
-        relativePath,
-        content: code,
-        contentHash: hash,
-        tree,
-        language: extractor.language,
-        moduleId,
+        worker.postMessage({ type: 'extract', filePath, relativePath });
+        
+        worker.once('message', async (msg) => {
+          active--;
+          if (msg.type === 'result') {
+            // Queue the DB write but don't block the worker
+            dbQueue = dbQueue.then(async () => {
+              try {
+                await this.saveResult(msg, repoId);
+                parsed++;
+              } catch (e) {
+                console.error(`\n❌ Error saving ${msg.filePath}: ${e}`);
+              }
+            });
+          } else if (msg.type === 'skipped') {
+            skipped++;
+          } else if (msg.type === 'error') {
+            console.error(`\n❌ Error processing ${msg.filePath}: ${msg.error}`);
+          }
+          next(worker);
+        });
       };
 
-      const result = extractor.extract(ctx);
-      const publicSymbols = result.symbols.filter(s => {
-        if ((s as any).isInternal && s.kind === 'variable') return false;
-        return true;
-      });
+      workers.forEach(w => next(w));
+    });
 
-      // Clean old symbols and edges
-      await this.store.query('DELETE symbol WHERE fileId = $fileId', { fileId: new StringRecordId(fileId) });
-      await this.store.deleteNode(fileId);
-
-      // Create file node
-      await this.store.createNode({
-        id: fileId,
-        type: 'file',
-        path: relativePath,
-        content_hash: hash,
-        size_bytes: Buffer.byteLength(code),
-        language: extractor.language,
-        ext: path.extname(filePath),
-        line_count: code.split('\n').length,
-        parse_status: result.parseErrors.length === 0 ? 'parsed' : 'partial',
-        last_parsed: new Date(),
-        module_id: moduleId ? new StringRecordId(moduleId) : null,
-      } as any);
-
-      // Link Repo/Module -> File
-      await this.store.createEdge({
-        type: 'contains',
-        from: moduleId ?? repoId,
-        to: fileId
-      } as any);
-
-      // Insert new symbols
-      for (const symbol of publicSymbols) {
-        const fullSymbol = {
-          ...symbol,
-          type: 'symbol',
-          fileId: new StringRecordId(fileId)
-        } as any;
-        delete fullSymbol.isInternal;
-
-        await this.store.createNode(fullSymbol);
-        
-        await this.store.createEdge({
-          type: 'contains',
-          from: fileId,
-          to: symbol.id
-        } as any);
-      }
-
-      for (const edge of result.edges) {
-        this.unresolvedEdges.push(edge);
-      }
-
-      parsed++;
-    }
+    await processQueue();
+    
+    // Clean up workers
+    await Promise.all(workers.map(w => w.terminate()));
 
     const duration = ((Date.now() - startTime) / 1000).toFixed(1);
     process.stdout.write(`\r✅ Indexing complete! Parsed ${parsed} files, skipped ${skipped} in ${duration}s.\n`);
