@@ -153,7 +153,7 @@ async function interfaceOnlyStrategy(relPath: string, absPath: string, fileId: s
         sig += ' { /* ... */ }';
       } else {
         // If it ends with {, we might need to add a closing } or just a comment
-        sig += ' /* ... implementation hidden ... */ }';
+        sig += ' /* [body] */ }';
       }
       output.push(sig);
     }
@@ -209,7 +209,7 @@ async function skeletonStrategy(relPath: string, absPath: string, fileId: string
         const isComment = symbols.some(s => s.docStartLine <= i && s.docEndLine >= i);
         const isBody = !isComment;
         if (isBody) {
-           resultLines.push('    /* ... implementation hidden ... */');
+           resultLines.push('    /* [body] */');
         }
         inHiddenBlock = true;
       }
