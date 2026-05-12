@@ -9,6 +9,7 @@ import { searchCommand } from './commands/search.js';
 import { readSymbolCommand } from './commands/read-symbol.js';
 import { smartReadCommand } from './commands/smart-read.js';
 import { mcpCommand } from './commands/mcp.js';
+import { reportCommand } from './commands/report.js';
 import { doctorCommand } from './commands/doctor.js';
 
 const program = new Command();
@@ -41,6 +42,7 @@ program.addCommand(readSymbolCommand);
 program.addCommand(smartReadCommand);
 program.addCommand(mcpCommand);
 program.addCommand(doctorCommand);
+program.addCommand(reportCommand);
 
 program.parseAsync(process.argv).catch(err => {
   console.error(err);
