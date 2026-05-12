@@ -50,6 +50,8 @@ DEFINE FIELD OVERWRITE endLine ON symbol TYPE int;
 DEFINE FIELD OVERWRITE startCol ON symbol TYPE int;
 DEFINE FIELD OVERWRITE endCol ON symbol TYPE int;
 DEFINE FIELD OVERWRITE docstring ON symbol TYPE option<string>;
+DEFINE FIELD OVERWRITE docStartLine ON symbol TYPE option<int>;
+DEFINE FIELD OVERWRITE docEndLine ON symbol TYPE option<int>;
 DEFINE FIELD OVERWRITE isExported ON symbol TYPE bool DEFAULT false;
 DEFINE FIELD OVERWRITE isAsync ON symbol TYPE option<bool>;
 DEFINE FIELD OVERWRITE isStatic ON symbol TYPE option<bool>;

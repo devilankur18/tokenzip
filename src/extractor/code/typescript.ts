@@ -42,7 +42,10 @@ export class TypeScriptExtractor extends BaseExtractor {
           endLine: node.endPosition.row + 1,
           startCol: node.startPosition.column,
           endCol: node.endPosition.column,
-          docstring: this.extractDocstring(node, ctx.content),
+          ...(() => {
+            const doc = this.extractDocstring(node, ctx.content);
+            return doc ? { docstring: doc.text, docStartLine: doc.startLine, docEndLine: doc.endLine } : {};
+          })(),
           isExported: this.isExported(node),
           modifiers: [],
           metadata: {},
@@ -66,7 +69,10 @@ export class TypeScriptExtractor extends BaseExtractor {
           endLine: node.endPosition.row + 1,
           startCol: node.startPosition.column,
           endCol: node.endPosition.column,
-          docstring: this.extractDocstring(node, ctx.content),
+          ...(() => {
+            const doc = this.extractDocstring(node, ctx.content);
+            return doc ? { docstring: doc.text, docStartLine: doc.startLine, docEndLine: doc.endLine } : {};
+          })(),
           isExported: this.isExported(node),
           modifiers: [],
           metadata: {},
@@ -123,7 +129,10 @@ export class TypeScriptExtractor extends BaseExtractor {
           endLine: node.endPosition.row + 1,
           startCol: node.startPosition.column,
           endCol: node.endPosition.column,
-          docstring: this.extractDocstring(node, ctx.content),
+          ...(() => {
+            const doc = this.extractDocstring(node, ctx.content);
+            return doc ? { docstring: doc.text, docStartLine: doc.startLine, docEndLine: doc.endLine } : {};
+          })(),
           isExported: false,
           modifiers: [],
           metadata: {},
@@ -147,7 +156,10 @@ export class TypeScriptExtractor extends BaseExtractor {
           endLine: node.endPosition.row + 1,
           startCol: node.startPosition.column,
           endCol: node.endPosition.column,
-          docstring: this.extractDocstring(node, ctx.content),
+          ...(() => {
+            const doc = this.extractDocstring(node, ctx.content);
+            return doc ? { docstring: doc.text, docStartLine: doc.startLine, docEndLine: doc.endLine } : {};
+          })(),
           isExported: this.isExported(node),
           modifiers: [],
           metadata: {},
@@ -169,7 +181,10 @@ export class TypeScriptExtractor extends BaseExtractor {
           endLine: node.endPosition.row + 1,
           startCol: node.startPosition.column,
           endCol: node.endPosition.column,
-          docstring: this.extractDocstring(node, ctx.content),
+          ...(() => {
+            const doc = this.extractDocstring(node, ctx.content);
+            return doc ? { docstring: doc.text, docStartLine: doc.startLine, docEndLine: doc.endLine } : {};
+          })(),
           isExported: this.isExported(node),
           modifiers: [],
           metadata: {},
@@ -191,22 +206,31 @@ export class TypeScriptExtractor extends BaseExtractor {
           endLine: node.endPosition.row + 1,
           startCol: node.startPosition.column,
           endCol: node.endPosition.column,
-          docstring: this.extractDocstring(node, ctx.content),
+          ...(() => {
+            const doc = this.extractDocstring(node, ctx.content);
+            return doc ? { docstring: doc.text, docStartLine: doc.startLine, docEndLine: doc.endLine } : {};
+          })(),
           isExported: this.isExported(node),
           modifiers: [],
           metadata: {},
         });
       },
-      'expression_statement': (node) => {
-        const expression = node.descendantsOfType('assignment_expression')[0];
-        if (expression) {
-          const left = expression.childForFieldName('left');
-          const right = expression.childForFieldName('right');
-          const functionTypes = ['function_expression', 'arrow_function', 'function', 'generator_function', 'method_definition'];
-          if (left?.type === 'member_expression' && functionTypes.includes(right?.type || '')) {
+      'assignment_expression': (node) => {
+        const left = node.childForFieldName('left');
+        let right = node.childForFieldName('right');
+        
+        // Chained assignment? req.get = req.header = function...
+        // We peek ahead to the end of the chain to see if it's a function
+        let ultimateRight = right;
+        while (ultimateRight?.type === 'assignment_expression') {
+          ultimateRight = ultimateRight.childForFieldName('right');
+        }
+
+        const functionTypes = ['function_expression', 'arrow_function', 'function', 'generator_function', 'method_definition'];
+        if (functionTypes.includes(ultimateRight?.type || '')) {
+          if (left?.type === 'member_expression' || left?.type === 'identifier') {
             const name = left.text;
             const id = this.generateSymbolId(ctx.relativePath, name, 'method', node.startPosition.row + 1);
-            
             const isInternal = this.isInsideFunction(node);
             
             symbols.push({
@@ -220,18 +244,25 @@ export class TypeScriptExtractor extends BaseExtractor {
               endLine: node.endPosition.row + 1,
               startCol: node.startPosition.column,
               endCol: node.endPosition.column,
-              docstring: this.extractDocstring(node, ctx.content),
+              ...(() => {
+            const doc = this.extractDocstring(node, ctx.content);
+            return doc ? { docstring: doc.text, docStartLine: doc.startLine, docEndLine: doc.endLine } : {};
+          })(),
               isExported: name.startsWith('exports.') || name.startsWith('module.exports'),
               modifiers: [],
               metadata: {},
             });
-            this.extractCalls(right, id, edges);
+            this.extractCalls(ultimateRight, id, edges);
           }
-        } else if (expression?.type === 'call_expression') {
+        }
+      },
+      'expression_statement': (node) => {
+        // Check for call expressions like defineGetter
+        const expression = node.firstChild;
+        if (expression?.type === 'call_expression') {
           const fnNode = expression.childForFieldName('function');
           if (fnNode?.text === 'defineGetter') {
             const args = expression.childForFieldName('arguments');
-            // defineGetter(obj, 'name', fn)
             const nameArg = args?.namedChild(1);
             const fnArg = args?.namedChild(2);
             
@@ -249,7 +280,10 @@ export class TypeScriptExtractor extends BaseExtractor {
                 endLine: node.endPosition.row + 1,
                 startCol: node.startPosition.column,
                 endCol: node.endPosition.column,
-                docstring: this.extractDocstring(node, ctx.content),
+                ...(() => {
+            const doc = this.extractDocstring(node, ctx.content);
+            return doc ? { docstring: doc.text, docStartLine: doc.startLine, docEndLine: doc.endLine } : {};
+          })(),
                 isExported: true,
                 modifiers: [],
                 metadata: {},
@@ -290,7 +324,10 @@ export class TypeScriptExtractor extends BaseExtractor {
         endLine: node.endPosition.row + 1,
         startCol: node.startPosition.column,
         endCol: node.endPosition.column,
-        docstring: this.extractDocstring(node, ctx.content),
+        ...(() => {
+          const doc = this.extractDocstring(node, ctx.content);
+          return doc ? { docstring: doc.text, docStartLine: doc.startLine, docEndLine: doc.endLine } : {};
+        })(),
         isExported: this.isExported(node),
         modifiers: [],
         metadata: {},

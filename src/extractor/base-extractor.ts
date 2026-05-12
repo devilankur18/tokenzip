@@ -27,7 +27,8 @@ export abstract class BaseExtractor {
     startLine: number
   ): string {
     const pathHash = this.hashPath(filePath);
-    return `symbol:${pathHash}_${symbolName}_${kind}_${startLine}`;
+    const safeName = symbolName.replace(/\W/g, '_');
+    return `symbol:${pathHash}_${safeName}_${kind}_${startLine}`;
   }
 
   protected hashPath(filePath: string): string {
@@ -47,10 +48,23 @@ export abstract class BaseExtractor {
     }
   }
 
-  protected extractDocstring(node: SyntaxNode, content: string): string | null {
-    const prev = node.previousNamedSibling;
-    if (prev && (prev.type === 'comment' || prev.type === 'block_comment')) {
-      return content.slice(prev.startIndex, prev.endIndex).trim();
+  protected extractDocstring(node: SyntaxNode, content: string): { text: string; startLine: number; endLine: number } | null {
+    let current: SyntaxNode | null = node;
+    while (current) {
+      const prev = current.previousNamedSibling;
+      if (prev && (prev.type === 'comment' || prev.type === 'block_comment')) {
+        return {
+          text: content.slice(prev.startIndex, prev.endIndex).trim(),
+          startLine: prev.startPosition.row + 1,
+          endLine: prev.endPosition.row + 1
+        };
+      }
+      // Only go up one level to check statement parent
+      if (current.parent && ['expression_statement', 'lexical_declaration', 'variable_declaration'].includes(current.parent.type)) {
+        current = current.parent;
+      } else {
+        break;
+      }
     }
     return null;
   }

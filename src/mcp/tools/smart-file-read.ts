@@ -28,12 +28,17 @@ export function createSmartFileReadTools(store: IStore, repoPath: string, budget
             type: 'number',
             default: 4000,
             description: 'Soft limit for response size. Tool will degrade mode if exceeded.'
+          },
+          include_docs: {
+            type: 'boolean',
+            default: false,
+            description: 'Whether to include JSDoc/comments. Default is false to save tokens.'
           }
         },
         required: ['path']
       },
       handler: async (args: any) => {
-        const { path: filePath, mode = 'interface_only', target_symbol, max_tokens = 4000 } = args;
+        const { path: filePath, mode = 'interface_only', target_symbol, max_tokens = 4000, include_docs = false } = args;
         const absPath = path.resolve(repoPath, filePath);
 
         // 1. Check if file exists in DB
@@ -59,11 +64,11 @@ export function createSmartFileReadTools(store: IStore, repoPath: string, budget
         const fileId = fileNode.id;
 
         // 2. Execute requested strategy
-        let result = await executeStrategy(mode, filePath, absPath, fileId, store, target_symbol, budget, max_tokens);
+        let result = await executeStrategy(mode, filePath, absPath, fileId, store, target_symbol, budget, max_tokens, include_docs);
 
         // 3. Degrade logic for skeleton
         if (mode === 'skeleton' && budget.estimate(result.content) > max_tokens) {
-          const degraded = await executeStrategy('interface_only', filePath, absPath, fileId, store, target_symbol, budget, max_tokens);
+          const degraded = await executeStrategy('interface_only', filePath, absPath, fileId, store, target_symbol, budget, max_tokens, include_docs);
           return {
             ...degraded,
             warnings: [...(degraded.warnings || []), 'Auto-downgraded from skeleton to interface_only due to token limit.']
@@ -90,24 +95,25 @@ export async function executeStrategy(
   store: IStore,
   targetSymbol: string | undefined,
   budget: TokenBudgetManager,
-  maxTokens: number
+  maxTokens: number,
+  includeDocs: boolean = false
 ): Promise<{ content: string; mode_used: string; symbol_count: number; tokensUsed: number; warnings?: string[] }> {
   let result: any;
   switch (mode) {
     case 'interface_only':
-      result = await interfaceOnlyStrategy(relPath, absPath, fileId, store);
+      result = await interfaceOnlyStrategy(relPath, absPath, fileId, store, includeDocs);
       break;
     case 'skeleton':
-      result = await skeletonStrategy(relPath, absPath, fileId, store);
+      result = await skeletonStrategy(relPath, absPath, fileId, store, includeDocs);
       break;
     case 'dependency_only':
       result = await dependencyOnlyStrategy(relPath, absPath, fileId, store);
       break;
     case 'implementation_of':
-      result = await implementationOfStrategy(relPath, absPath, fileId, targetSymbol || '', store);
+      result = await implementationOfStrategy(relPath, absPath, fileId, targetSymbol || '', store, includeDocs);
       break;
     default:
-      result = await interfaceOnlyStrategy(relPath, absPath, fileId, store);
+      result = await interfaceOnlyStrategy(relPath, absPath, fileId, store, includeDocs);
   }
 
   return {
@@ -116,7 +122,7 @@ export async function executeStrategy(
   };
 }
 
-async function interfaceOnlyStrategy(relPath: string, absPath: string, fileId: string, store: IStore) {
+async function interfaceOnlyStrategy(relPath: string, absPath: string, fileId: string, store: IStore, includeDocs: boolean) {
   const recordId = typeof fileId === 'string' ? new StringRecordId(fileId) : fileId;
   const symbols = await store.query<any>('SELECT * FROM symbol WHERE fileId = $fileId ORDER BY startLine ASC', { fileId: recordId });
   const lines = fileCache.getLines(absPath);
@@ -139,7 +145,7 @@ async function interfaceOnlyStrategy(relPath: string, absPath: string, fileId: s
       output.push(content);
     } else {
       // Show signature only
-      if (sym.docstring) {
+      if (includeDocs && sym.docstring) {
         output.push(sym.docstring);
       }
       let sig = sym.signature || lines[sym.startLine - 1];
@@ -161,16 +167,22 @@ async function interfaceOnlyStrategy(relPath: string, absPath: string, fileId: s
   };
 }
 
-async function skeletonStrategy(relPath: string, absPath: string, fileId: string, store: IStore) {
+async function skeletonStrategy(relPath: string, absPath: string, fileId: string, store: IStore, includeDocs: boolean) {
   const recordId = typeof fileId === 'string' ? new StringRecordId(fileId) : fileId;
   const symbols = await store.query<any>('SELECT * FROM symbol WHERE fileId = $fileId ORDER BY startLine ASC', { fileId: recordId });
   const lines = fileCache.getLines(absPath);
   
   const resultLines: string[] = [];
   
-  // Mark lines that are part of a function/method body
-  const bodyLines = new Set<number>();
+  // Mark lines that are part of a function/method body OR comment
+  const hiddenLines = new Set<number>();
   for (const sym of symbols) {
+    if (!includeDocs && sym.docStartLine && sym.docEndLine) {
+      for (let i = sym.docStartLine; i <= sym.docEndLine; i++) {
+        hiddenLines.add(i);
+      }
+    }
+    
     if (['function', 'method', 'class'].includes(sym.kind) && sym.endLine > sym.startLine) {
       // Check if it has any "structural" children (not just variables)
       const hasStructuralChild = symbols.some(
@@ -183,7 +195,7 @@ async function skeletonStrategy(relPath: string, absPath: string, fileId: string
       
       if (!hasStructuralChild) {
         for (let i = sym.startLine + 1; i < sym.endLine; i++) {
-          bodyLines.add(i);
+          hiddenLines.add(i);
         }
       }
     }
@@ -191,9 +203,14 @@ async function skeletonStrategy(relPath: string, absPath: string, fileId: string
 
   let inHiddenBlock = false;
   for (let i = 1; i <= lines.length; i++) {
-    if (bodyLines.has(i)) {
+    if (hiddenLines.has(i)) {
       if (!inHiddenBlock) {
-        resultLines.push('    /* ... implementation hidden ... */');
+        // Only show implementation hidden if it's not just a comment
+        const isComment = symbols.some(s => s.docStartLine <= i && s.docEndLine >= i);
+        const isBody = !isComment;
+        if (isBody) {
+           resultLines.push('    /* ... implementation hidden ... */');
+        }
         inHiddenBlock = true;
       }
       continue;
@@ -249,7 +266,7 @@ async function dependencyOnlyStrategy(relPath: string, absPath: string, fileId: 
     return await dependency_only_logic(relPath, absPath, fileId, store);
 }
 
-async function implementationOfStrategy(relPath: string, absPath: string, fileId: string, targetSymbol: string, store: IStore) {
+async function implementationOfStrategy(relPath: string, absPath: string, fileId: string, targetSymbol: string, store: IStore, includeDocs: boolean) {
   // Use proper RecordId for fileId if it's not already one
   const recordId = typeof fileId === 'string' ? new StringRecordId(fileId) : fileId;
 
@@ -272,7 +289,7 @@ async function implementationOfStrategy(relPath: string, absPath: string, fileId
          // Let's try to get the full symbol for this closest match
          const fallbackRes = await store.query<any>('SELECT * FROM symbol WHERE name = $name AND fileId = $fileId LIMIT 1', { name: closest, fileId: recordId });
          if (fallbackRes && fallbackRes.length > 0) {
-           return await renderSymbol(fallbackRes[0], absPath, store);
+           return await renderSymbol(fallbackRes[0], absPath, store, includeDocs);
          }
        }
        msg += ` Did you mean '${closest}'?`;
@@ -288,10 +305,10 @@ async function implementationOfStrategy(relPath: string, absPath: string, fileId
     };
   }
 
-  return await renderSymbol(results[0], absPath, store);
+  return await renderSymbol(results[0], absPath, store, includeDocs);
 }
 
-async function renderSymbol(sym: any, absPath: string, store: IStore) {
+async function renderSymbol(sym: any, absPath: string, store: IStore, includeDocs: boolean) {
   const output: string[] = [];
 
   // If it's a method, try to find the parent class signature for context
@@ -318,7 +335,8 @@ async function renderSymbol(sym: any, absPath: string, store: IStore) {
     }
   }
 
-  const code = fileCache.getRange(absPath, sym.startLine, sym.endLine).join('\n');
+  const rangeStart = (includeDocs && sym.docStartLine) ? sym.docStartLine : sym.startLine;
+  const code = fileCache.getRange(absPath, rangeStart, sym.endLine).join('\n');
   output.push(code);
 
   if (parentId) {

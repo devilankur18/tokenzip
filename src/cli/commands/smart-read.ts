@@ -11,6 +11,7 @@ export const smartReadCommand = new Command('smart-read')
   .option('-m, --mode <mode>', 'Projection mode: interface_only, skeleton, dependency_only, implementation_of', 'skeleton')
   .option('-s, --symbol <name>', 'Target symbol name (required for implementation_of)')
   .option('-t, --tokens <count>', 'Token budget', '8000')
+  .option('--docs', 'Include JSDoc/comments in output', false)
   .action(async (filePath, options, command) => {
     const globalOptions = command.parent.opts();
     const { dbPath, repoPath } = resolveDbPath(globalOptions.cwd);
@@ -42,7 +43,8 @@ export const smartReadCommand = new Command('smart-read')
         store,
         options.symbol || null,
         budget,
-        maxTokens
+        maxTokens,
+        options.docs
       );
 
       console.log(result.content);

@@ -10,6 +10,8 @@ export interface SymbolIR {
   startCol: number;
   endCol: number;
   docstring?: string | null;
+  docStartLine?: number;
+  docEndLine?: number;
   isExported: boolean;
   isAsync?: boolean;
   isStatic?: boolean;
