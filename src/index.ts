@@ -3,3 +3,6 @@ export * from './engine/indexer.js';
 export * from './mcp/server.js';
 export * from './query/builder.js';
 export * from './storage/surreal/store.js';
+export * from './mcp/tools/smart-file-read.js';
+export * from './mcp/token-budget.js';
+export * from './utils/hash.js';

@@ -14,7 +14,6 @@ export class SurrealStore implements IStore {
     this.dbPath = dbPath;
     this.db = new Surreal({
       engines: {
-        ...createRemoteEngines(),
         ...createNodeEngines(),
       },
     });
@@ -28,15 +27,26 @@ export class SurrealStore implements IStore {
       }
     }
     
-    const connectionString = this.dbPath.includes('://') || this.dbPath.includes(':')
+    const connectionString = this.dbPath.includes('://')
       ? this.dbPath 
       : `surrealkv:${this.dbPath}`;
     
     console.log(`Connecting to surreal db at ${connectionString}...`);
+    let timeoutId: NodeJS.Timeout;
+    const timeout = new Promise((_, reject) => {
+      timeoutId = setTimeout(() => reject(new Error('Connection timed out after 10s. Is another TokenZip process running?')), 10000);
+    });
+
     try {
-      await this.db.connect(connectionString);
-      console.log('Connected to surreal db!');
+      await Promise.race([
+        this.db.connect(connectionString),
+        timeout
+      ]);
+      clearTimeout(timeoutId!);
+
+      console.log('Connected to DB.');
       await this.db.use({ namespace: 'tokenzip', database: 'graph' });
+      console.log('Using namespace/db.');
     } catch (err) {
       console.error('SurrealDB Connection Error:', err);
       throw err;

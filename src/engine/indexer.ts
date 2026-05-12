@@ -172,6 +172,10 @@ export class Indexer {
       };
 
       const result = extractor.extract(ctx);
+      const publicSymbols = result.symbols.filter(s => {
+        if ((s as any).isInternal && s.kind === 'variable') return false;
+        return true;
+      });
 
       // Clean old symbols and edges
       await this.store.query('DELETE symbol WHERE fileId = $fileId', { fileId: new StringRecordId(fileId) });
@@ -200,13 +204,15 @@ export class Indexer {
       } as any);
 
       // Insert new symbols
-      for (const symbol of result.symbols) {
+      for (const symbol of publicSymbols) {
         const fullSymbol = {
           ...symbol,
           type: 'symbol',
-          fileId: new StringRecordId(fileId),
-        };
-        await this.store.createNode(fullSymbol as any);
+          fileId: new StringRecordId(fileId)
+        } as any;
+        delete fullSymbol.isInternal;
+
+        await this.store.createNode(fullSymbol);
         
         await this.store.createEdge({
           type: 'contains',

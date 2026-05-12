@@ -17,12 +17,14 @@ Available Tools:
   query_symbol           Lookup symbol definition (args: symbol_name=...)
   find_references        Find callers of a symbol (args: symbol_name=...)
   get_dependencies       Get import graph for a file (args: file_path=...)
+  smart_file_read        Read semantic file projections (args: path=..., mode=...)
 
 Examples:
   $ tokenzip mcp get_codebase_stats
   $ tokenzip mcp query_symbol symbol_name=createApp
   $ tokenzip mcp get_file_symbols file_path=src/index.ts
   $ tokenzip mcp find_references symbol_name=Indexer
+  $ tokenzip mcp smart_file_read path=src/index.ts mode=skeleton
 `)
   .action(async (toolName, argsArray, options, command) => {
     const globalOptions = command.parent.opts();

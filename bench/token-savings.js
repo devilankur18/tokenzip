@@ -10,7 +10,7 @@
  *   node bench/token-savings.js --cwd /tmp/express-bench
  */
 
-import { SurrealStore, Indexer } from '../dist/index.js';
+import { SurrealStore, Indexer, executeStrategy, TokenBudgetManager } from '../dist/index.js';
 import { readFileSync, readdirSync, statSync, existsSync } from 'fs';
 import { join, resolve, dirname } from 'path';
 import { parseArgs } from 'util';
@@ -23,15 +23,12 @@ const BENCH_REPO = resolve(args.cwd);
 const CHARS_PER_TOKEN = 4;
 
 // ─── setup in-memory store for benchmark ────────────────────────────────────
-console.log('🚀 Initializing in-memory benchmark engine...');
 const store = new SurrealStore('mem://');
 await store.initialize();
 await store.migrate();
 
 const indexer = new Indexer(store, BENCH_REPO);
-console.log('📦 Indexing express (in-memory)...');
 await indexer.indexCodebase();
-console.log('✅ Indexing complete.\n');
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -57,6 +54,19 @@ function readCodeRange(filePath, range) {
   } catch {
     return '';
   }
+}
+
+async function tzSmartRead(filePath, mode, targetSymbol = null) {
+  const allFiles = await store.query('SELECT path, id FROM file');
+  const targetFile = allFiles.find(f => f.path === filePath || f.path.endsWith(filePath));
+  if (!targetFile) return "";
+  
+  const fileId = targetFile.id;
+  const absPath = resolve(BENCH_REPO, filePath);
+  
+  // Signature: executeStrategy(mode, relPath, absPath, fileId, store, targetSymbol, budget, maxTokens)
+  const result = await executeStrategy(mode, filePath, absPath, fileId, store, targetSymbol, new TokenBudgetManager(), 8000);
+  return result.content;
 }
 
 async function tokenzipSearch(query, limit = 5, includeBody = false) {
@@ -207,6 +217,57 @@ const results = [];
   const naiveChars = naiveFiles.reduce((acc, f) => acc + readFileChars(f), 0) || 15000;
   process.stdout.write(`  ${B('Running')} ${label}...`);
   const tzOut = await tokenzipSearch('handle', 5, false);
+  const r = row(label, naiveChars, tzOut);
+  results.push(r);
+  console.log(`  ${G('done')}  (saved ${savings(r.naiveTok, r.tzTok)})`);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SCENARIO 6: Smart File Read - interface_only vs full file
+// Naive: paste lib/request.js
+// TokenZip: smart_file_read(mode="interface_only")
+// ─────────────────────────────────────────────────────────────────────────────
+{
+  const label = 'S6: Smart Read (interface_only): lib/request.js';
+  const file = 'lib/request.js';
+  const fullPath = join(BENCH_REPO, file);
+  const naiveChars = readFileChars(fullPath) || 8000;
+  process.stdout.write(`  ${B('Running')} ${label}...`);
+  const tzOut = await tzSmartRead(file, 'interface_only');
+  const r = row(label, naiveChars, tzOut);
+  results.push(r);
+  console.log(`  ${G('done')}  (saved ${savings(r.naiveTok, r.tzTok)})`);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SCENARIO 7: Smart File Read - skeleton vs full file
+// Naive: paste lib/response.js
+// TokenZip: smart_file_read(mode="skeleton")
+// ─────────────────────────────────────────────────────────────────────────────
+{
+  const label = 'S7: Smart Read (skeleton): lib/response.js';
+  const file = 'lib/response.js';
+  const fullPath = join(BENCH_REPO, file);
+  const naiveChars = readFileChars(fullPath) || 10000;
+  process.stdout.write(`  ${B('Running')} ${label}...`);
+  const tzOut = await tzSmartRead(file, 'skeleton');
+  const r = row(label, naiveChars, tzOut);
+  results.push(r);
+  console.log(`  ${G('done')}  (saved ${savings(r.naiveTok, r.tzTok)})`);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SCENARIO 8: Smart Read (implementation_of) vs full file
+// Naive: paste lib/application.js
+// TokenZip: smart_file_read(mode="implementation_of", target_symbol="handle")
+// ─────────────────────────────────────────────────────────────────────────────
+{
+  const label = 'S8: Smart Read (implementation_of "handle"): lib/application.js';
+  const file = 'lib/application.js';
+  const fullPath = join(BENCH_REPO, file);
+  const naiveChars = readFileChars(fullPath) || 12000;
+  process.stdout.write(`  ${B('Running')} ${label}...`);
+  const tzOut = await tzSmartRead(file, 'implementation_of', 'handle');
   const r = row(label, naiveChars, tzOut);
   results.push(r);
   console.log(`  ${G('done')}  (saved ${savings(r.naiveTok, r.tzTok)})`);

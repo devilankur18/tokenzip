@@ -12,7 +12,6 @@ Examples:
   $ tokenzip parse --full    # Full wipe and re-index from scratch
 `)
   .action(async (options, command) => {
-    console.log('Starting parse command...');
     const globalOptions = command.parent.opts();
     const { dbPath, repoPath } = resolveDbPath(globalOptions.cwd);
 
@@ -31,4 +30,5 @@ Examples:
 
     await store.close();
     console.log('Parse complete!');
+    process.exit(0);
   });

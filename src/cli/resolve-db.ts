@@ -11,18 +11,23 @@ import fs from 'fs';
  * Returns { dbPath, repoPath } where repoPath is where the code lives.
  */
 export function resolveDbPath(cwd: string = process.cwd()): { dbPath: string; repoPath: string } {
-  const absolutePath = path.resolve(cwd || process.cwd());
+  let current = path.resolve(cwd || process.cwd());
   
-  // Case A: Are we inside a .tokenzip directory?
-  if (absolutePath.endsWith('.tokenzip') || absolutePath.includes('/.tokenzip/')) {
-    const rootOfTokenzip = absolutePath.split('/.tokenzip')[0] + '/.tokenzip';
-    const db = path.join(rootOfTokenzip, 'db');
-    // If the tool is installed AS .tokenzip in a project, repoPath is .tokenzip
-    // This allows indexing JUST the tool source if needed.
-    return { dbPath: db, repoPath: rootOfTokenzip };
+  // Look for .tokenzip/db starting from current and going up
+  while (current !== path.parse(current).root) {
+    const potentialDb = path.join(current, '.tokenzip', 'db');
+    if (fs.existsSync(potentialDb)) {
+      return { dbPath: potentialDb, repoPath: current };
+    }
+    // Special case: we are ALREADY inside a .tokenzip directory that has a db sibling/child
+    if (path.basename(current) === '.tokenzip' && fs.existsSync(path.join(current, 'db'))) {
+       return { dbPath: path.join(current, 'db'), repoPath: current };
+    }
+    current = path.dirname(current);
   }
 
-  // Standard case: .tokenzip is a child of the code we want to index
-  const dbPath = path.join(absolutePath, '.tokenzip', 'db');
-  return { dbPath, repoPath: absolutePath };
+  // Default: current directory is repo root, and we'll create .tokenzip/db there
+  const root = path.resolve(cwd || process.cwd());
+  const dbPath = path.join(root, '.tokenzip', 'db');
+  return { dbPath, repoPath: root };
 }

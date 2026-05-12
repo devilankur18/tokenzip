@@ -198,14 +198,16 @@ export class TypeScriptExtractor extends BaseExtractor {
         });
       },
       'expression_statement': (node) => {
-        const expression = node.child(0);
-        if (expression?.type === 'assignment_expression') {
+        const expression = node.descendantsOfType('assignment_expression')[0];
+        if (expression) {
           const left = expression.childForFieldName('left');
           const right = expression.childForFieldName('right');
-          
-          if (left?.type === 'member_expression' && (right?.type === 'function_expression' || right?.type === 'arrow_function' || right?.type === 'function')) {
+          const functionTypes = ['function_expression', 'arrow_function', 'function', 'generator_function', 'method_definition'];
+          if (left?.type === 'member_expression' && functionTypes.includes(right?.type || '')) {
             const name = left.text;
             const id = this.generateSymbolId(ctx.relativePath, name, 'method', node.startPosition.row + 1);
+            
+            const isInternal = this.isInsideFunction(node);
             
             symbols.push({
               id,
@@ -213,6 +215,7 @@ export class TypeScriptExtractor extends BaseExtractor {
               name,
               kind: 'method',
               signature: ctx.content.slice(node.startIndex, node.endIndex).split('\n')[0],
+              isInternal,
               startLine: node.startPosition.row + 1,
               endLine: node.endPosition.row + 1,
               startCol: node.startPosition.column,
@@ -223,6 +226,36 @@ export class TypeScriptExtractor extends BaseExtractor {
               metadata: {},
             });
             this.extractCalls(right, id, edges);
+          }
+        } else if (expression?.type === 'call_expression') {
+          const fnNode = expression.childForFieldName('function');
+          if (fnNode?.text === 'defineGetter') {
+            const args = expression.childForFieldName('arguments');
+            // defineGetter(obj, 'name', fn)
+            const nameArg = args?.namedChild(1);
+            const fnArg = args?.namedChild(2);
+            
+            if (nameArg && fnArg) {
+              const name = nameArg.text.replace(/['"]/g, '');
+              const id = this.generateSymbolId(ctx.relativePath, name, 'method', node.startPosition.row + 1);
+              
+              symbols.push({
+                id,
+                fileId,
+                name,
+                kind: 'method',
+                signature: `getter ${name}`,
+                startLine: node.startPosition.row + 1,
+                endLine: node.endPosition.row + 1,
+                startCol: node.startPosition.column,
+                endCol: node.endPosition.column,
+                docstring: this.extractDocstring(node, ctx.content),
+                isExported: true,
+                modifiers: [],
+                metadata: {},
+              });
+              this.extractCalls(fnArg, id, edges);
+            }
           }
         }
       },
@@ -251,6 +284,8 @@ export class TypeScriptExtractor extends BaseExtractor {
         name,
         kind: 'variable',
         signature: ctx.content.slice(node.startIndex, node.endIndex).split('\n')[0],
+        // Skip internal variables (very basic heuristic: if it's inside a function/method)
+        isInternal: this.isInsideFunction(node),
         startLine: node.startPosition.row + 1,
         endLine: node.endPosition.row + 1,
         startCol: node.startPosition.column,
@@ -283,6 +318,17 @@ export class TypeScriptExtractor extends BaseExtractor {
         }
       }
     });
+  }
+
+  private isInsideFunction(node: any): boolean {
+    let curr = node.parent;
+    while (curr) {
+      if (['function_declaration', 'function_expression', 'arrow_function', 'method_definition'].includes(curr.type)) {
+        return true;
+      }
+      curr = curr.parent;
+    }
+    return false;
   }
 
   private isExported(node: any): boolean {
