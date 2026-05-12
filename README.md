@@ -75,7 +75,36 @@ tokenzip parse
 # 4. Search for any symbol
 tokenzip search "useEffect"
 tokenzip search "handleAuth"
-tokenzip search "db" --limit 5
+tokenzip search "db" --l## Features
+
+- **Relational Graph Storage**: Built on **SurrealDB** (embedded), indexing files, modules, symbols, and relationships.
+- **Deep Code Analysis**: Uses **Tree-sitter** to extract not just symbols, but complex relationships like `calls`, `imports`, `inherits`, and `implements`.
+- **Interactive Indexing**: Real-time progress indicators and clear phase logging (Scanning → Indexing → Git → Resolution).
+- **Smart Scoping**: Automatically respects `.gitignore` rules and provides robust error handling for system or restricted directories.
+- **Flexible CLI**: Persistent configuration via `TOKENZIP_CWD` environment variable and global `--cwd` support.
+- **AI-Ready (MCP)**: Exposes everything as an **MCP server** for deep context in Claude, Cursor, and other AI copilots.
+
+---
+
+## Install
+
+```bash
+npm install -g @ankur/tokenzip
+```
+
+---
+
+## Configuration
+
+TokenZip uses a global `--cwd` option to determine the repository root. You can set this once via an environment variable to avoid repeating it:
+
+```bash
+# Set it in your .zshrc or .bashrc
+export TOKENZIP_CWD=/path/to/your/project
+
+# Now you can run commands from anywhere
+tokenzip parse
+tokenzip search "Indexer"
 ```
 
 ---
@@ -84,231 +113,117 @@ tokenzip search "db" --limit 5
 
 ### `tokenzip init`
 
-Initialize TokenZip in the current directory. Creates `.tokenzip/` with a `.gitignore` to exclude the database from version control.
+Initialize TokenZip in the target directory. Creates the `.tokenzip/` metadata folder.
 
 ```bash
-tokenzip init
-```
-
-**Output:**
-```
-Created .tokenzip directory
-Created .tokenzip/.gitignore
-✅ TokenZip initialized! Run `tokenzip parse` to index your codebase.
+tokenzip init [--cwd <dir>]
 ```
 
 ---
 
 ### `tokenzip parse`
 
-Parse the codebase and build the knowledge graph. Runs incrementally by default — only re-indexes files that have changed since the last run.
+Index the codebase and build the knowledge graph.
+
+- **Interactive**: Shows real-time parsing progress and statistics.
+- **Incremental**: Only parses changed files using content hashing.
+- **Scale-Ready**: Respects `.gitignore` and handles restricted directories gracefully.
 
 ```bash
-tokenzip parse           # incremental (fast, only changed files)
-tokenzip parse --full    # full re-index from scratch
+tokenzip parse [--full]
 ```
-
-**What it indexes:**
-- All `.ts`, `.tsx`, `.js`, `.jsx` files (more languages coming)
-- Symbol definitions: functions, classes, interfaces, variables, methods
-- Import/export edges
-- Function call edges (cross-file)
-- Git commit history for each file
 
 **Output:**
 ```
-🚀 Indexing 42 files...
-✅ Indexing complete. Parsed 35 files.
-Extracting Git history...
-Found 12 commits.
-Git history extraction complete.
-🔄 Resolving 143 edges...
-✅ Edge resolution complete.
-Parse complete!
+📂 Working Directory: /Users/ankur/dev/my-project
+📦 Initializing Repository...
+🔍 Scanning files... found 1240 files.
+
+🚀 Indexing 1240 files...
+   [45%] Processing: src/components/Header.tsx...
+✅ Indexing complete! Parsed 842 files, skipped 398 in 12.4s.
+
+📜 Extracting Git history... done.
+🔄 Resolving 452 edges... done.
+
+✨ Codebase Knowledge Graph is ready!
 ```
 
 ---
 
 ### `tokenzip search <query>`
 
-Search for symbols by name. Returns rich context including location, signature, call stack, and git history.
+Search for symbols by name. Returns rich context including:
+- **Call Stack**: Who calls this symbol and what does it call?
+- **Hierarchy**: Inheritance (`inherits`) and interface (`implements`) links.
+- **History**: Recent git commits touching the file.
 
 ```bash
-tokenzip search <query>
-tokenzip search <query> --limit 5
-tokenzip search <query> --cwd /path/to/repo
+tokenzip search useEffect
 ```
-
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--limit <n>` | `10` | Maximum number of results to return |
-| `--cwd <dir>` | current dir | Root of the repo to search |
-
-**Example output:**
-```
-SYMBOL: createMcpServer
-KIND: function
-LOC: src/mcp/server.ts:8-38
-SIG: async function createMcpServer(store: IStore, repoPath: string) {
-CALL_STACK_IN (Callers):
-  - None
-CALL_STACK_OUT (Internal Dependencies):
-  - registerTools [src/mcp/tools/registry.ts]
-DOCS_WORKFLOWS:
-  - None
-GIT_HISTORY:
-  - fe0b20e3 initial commit (Ankur Agarwal)
----
-```
-
-The search is **case-insensitive** and does substring matching — `tokenzip search server` will match `createMcpServer`, `ServerConfig`, etc.
 
 ---
 
 ### `tokenzip serve`
 
-Start the **MCP (Model Context Protocol) server** over stdio. Exposes the knowledge graph to AI copilots that support MCP.
+Start the **MCP (Model Context Protocol) server**. Exposes your code structure to AI copilots.
 
 ```bash
 tokenzip serve
-tokenzip serve --cwd /path/to/repo
 ```
 
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--cwd <dir>` | current dir | Root of the repo to serve |
-
-**Available MCP tools exposed:**
-
+**Available Tools:**
 | Tool | Description |
 |------|-------------|
-| `get_codebase_stats` | File, symbol, edge counts |
-| `query_repo_structure` | List of all files and modules |
-| `get_file_symbols` | All symbols in a specific file |
-| `query_symbol` | Symbol definition + signature by name |
-| `find_references` | All callers of a symbol |
-| `get_dependencies` | Import graph for a file |
-
----
-
-### `tokenzip reset`
-
-Remove the database and optionally re-index from scratch.
-
-```bash
-tokenzip reset             # wipe the database only
-tokenzip reset --parse     # wipe + re-index in one step
-```
-
----
-
-## AI Copilot Integration (MCP)
-
-### Claude Desktop
-
-Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
-
-```json
-{
-  "mcpServers": {
-    "tokenzip": {
-      "command": "tokenzip",
-      "args": ["serve", "--cwd", "/absolute/path/to/your-repo"]
-    }
-  }
-}
-```
-
-### Cursor / VS Code (MCP-compatible extensions)
-
-```json
-{
-  "mcp": {
-    "servers": {
-      "tokenzip": {
-        "command": "tokenzip",
-        "args": ["serve", "--cwd", "${workspaceFolder}"]
-      }
-    }
-  }
-}
-```
-
-### Smithery / other MCP hosts
-
-```bash
-tokenzip serve --cwd /path/to/repo
-```
-The server communicates over stdio and is compatible with any MCP 1.x client.
+| `get_codebase_stats` | High-level overview of the graph density |
+| `query_repo_structure` | Hierarchical view of modules and files |
+| `find_references` | Multi-relationship search (calls, references, inherits, implements) |
+| `query_symbol` | Get definition, signature, and context |
 
 ---
 
 ## How It Works
 
-```
-Your Repo
-    │
-    ├─ tokenzip init     → creates .tokenzip/
-    │
-    ├─ tokenzip parse    → 1. Walks all source files
-    │                      2. Parses with Tree-sitter
-    │                      3. Extracts symbols, imports, calls
-    │                      4. Resolves cross-file edges
-    │                      5. Indexes git history
-    │                      6. Stores everything in SurrealDB (.tokenzip/db)
-    │
-    ├─ tokenzip search   → Direct graph query via SurrealQL
-    │
-    └─ tokenzip serve    → MCP server over stdio
-                           AI copilots call tools → SurrealDB queries → results
-```
+TokenZip transforms source code into a queryable graph:
 
-**Storage:** [SurrealDB](https://surrealdb.com/) embedded (SurrealKV), stored entirely in `.tokenzip/db`. No external server needed.
-
-**Parsing:** [Tree-sitter](https://tree-sitter.github.io/) with the TypeScript grammar. Language support is pluggable via the `ExtractorRegistry`.
+1. **Scan**: Identifies files, respecting `.gitignore`.
+2. **Extract**: Parses with Tree-sitter to find symbols and local relationships.
+3. **Link**: Performs global edge resolution to connect calls across files.
+4. **Enrich**: Maps Git history and inheritance hierarchies.
+5. **Serve**: Provides a standard MCP interface for AI tools.
 
 ---
 
-## Graph Schema
+## Supported Languages
 
-| Node | Fields |
-|------|--------|
-| `file` | `path`, `language`, `line_count`, `content_hash`, `parse_status` |
-| `symbol` | `name`, `kind`, `signature`, `startLine`, `endLine`, `fileId`, `isExported` |
-| `module` | `name`, `is_root` |
-| `commit` | `hash`, `message`, `author`, `date` |
-
-| Edge | Meaning |
-|------|---------|
-| `calls` | Symbol A calls Symbol B |
-| `imports` | File/module A imports from B |
-| `modified_in` | File was changed in commit |
+| Language | Status | Features |
+|----------|--------|----------|
+| **TypeScript/JSX** | ✅ Full | Classes, Interfaces, Call-tracking, Inheritance |
+| **JavaScript** | ✅ Full | Symbol extraction, Imports/Exports |
+| **Python/Go/Rust** | 🔜 Planned | - |
 
 ---
 
 ## Project Structure
 
 ```
-.tokenzip/
-├── src/
-│   ├── cli/
-│   │   ├── commands/    # init, parse, reset, search, serve
-│   │   ├── resolve-db.ts
-│   │   └── index.ts
-│   ├── engine/
-│   │   └── indexer.ts   # orchestrates parsing + edge resolution
-│   ├── extractor/
-│   │   ├── base-extractor.ts
-│   │   ├── code/
-│   │   │   └── typescript.ts   # Tree-sitter symbol extraction
-│   │   ├── git.ts              # Git history extractor
-│   │   └── registry.ts
-│   ├── mcp/
-│   │   ├── server.ts           # MCP server factory
-│   │   ├── token-budget.ts     # Response size management
-│   │   └── tools/
-│   │       ├── structure.ts    # repo/file tools
-│   │       └── symbol.ts       # symbol/reference tools
+src/
+├── cli/                 # Command routing and CWD resolution
+├── engine/              # Indexer logic & .gitignore handling
+├── extractor/           
+│   ├── code/           # Language-specific Tree-sitter extractors
+│   └── git.ts          # Git history enrichment
+├── mcp/                 # MCP Server & Tool definitions
+├── storage/             # SurrealDB schema & store implementation
+└── utils/               # Hashing and path utilities
+```
+
+---
+
+## License
+
+MIT © Ankur Agarwal
+ence tools
 │   └── storage/
 │       └── surreal/
 │           ├── migrations.ts   # Schema definitions

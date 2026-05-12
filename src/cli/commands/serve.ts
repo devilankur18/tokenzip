@@ -20,8 +20,9 @@ AI Copilot config (Claude Desktop):
     }
   }
 `)
-  .action(async (options) => {
-    const { dbPath, repoPath } = resolveDbPath(options.cwd);
+  .action(async (options, command) => {
+    const globalOptions = command.parent.opts();
+    const { dbPath, repoPath } = resolveDbPath(globalOptions.cwd);
     const store = new SurrealStore(dbPath);
     await store.initialize();
     

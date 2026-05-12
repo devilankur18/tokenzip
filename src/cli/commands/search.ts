@@ -21,8 +21,9 @@ Output fields:
   CALL_STACK_OUT  What this symbol calls
   GIT_HISTORY     Recent commits touching this file
 `)
-  .action(async (query, options) => {
-    const { dbPath } = resolveDbPath(options.cwd);
+  .action(async (query, options, command) => {
+    const globalOptions = command.parent.opts();
+    const { dbPath } = resolveDbPath(globalOptions.cwd);
     const store = new SurrealStore(dbPath);
     await store.initialize();
 

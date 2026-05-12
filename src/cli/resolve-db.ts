@@ -10,8 +10,8 @@ import fs from 'fs';
  *
  * Returns { dbPath, repoPath } where repoPath is where the code lives.
  */
-export function resolveDbPath(cwd: string): { dbPath: string; repoPath: string } {
-  const absolutePath = path.resolve(cwd);
+export function resolveDbPath(cwd: string = process.cwd()): { dbPath: string; repoPath: string } {
+  const absolutePath = path.resolve(cwd || process.cwd());
   
   // Case A: Are we inside a .tokenzip directory?
   if (absolutePath.endsWith('.tokenzip') || absolutePath.includes('/.tokenzip/')) {
