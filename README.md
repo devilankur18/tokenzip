@@ -152,14 +152,28 @@ tokenzip parse [--full]
 ---
 
 ### `tokenzip search <query>`
-
-Search for symbols by name. Returns rich context including:
-- **Call Stack**: Who calls this symbol and what does it call?
-- **Hierarchy**: Inheritance (`inherits`) and interface (`implements`) links.
-- **History**: Recent git commits touching the file.
-
+...
 ```bash
 tokenzip search useEffect
+```
+
+---
+
+### `tokenzip smart-read <file_path>`
+
+Read semantic projections of a file instead of raw text. This saves up to 90% of tokens when feeding code to AI models.
+
+- **`interface_only`**: Shows only function signatures, class members, and types.
+- **`skeleton`**: Shows the full file structure but replaces all function/method bodies with `/* ... implementation hidden ... */`.
+- **`dependency_only`**: Extract imports, exports, and a summary call graph.
+- **`implementation_of`**: Focuses on the implementation of a specific symbol (requires `--symbol`).
+
+```bash
+# Get the interface of a file
+tokenzip smart-read src/index.ts --mode interface_only
+
+# See how a specific function is implemented
+tokenzip smart-read lib/application.js --mode implementation_of --symbol handle
 ```
 
 ---
@@ -179,6 +193,7 @@ tokenzip serve
 | `query_repo_structure` | Hierarchical view of modules and files |
 | `find_references` | Multi-relationship search (calls, references, inherits, implements) |
 | `query_symbol` | Get definition, signature, and context |
+| `smart_file_read` | Get semantic projections (signatures, skeleton, logic) |
 
 ---
 

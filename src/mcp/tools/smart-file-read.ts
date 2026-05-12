@@ -4,6 +4,7 @@ import { fileCache } from '../../utils/file-cache.js';
 import { findClosestMatch } from '../../utils/string-utils.js';
 import path from 'path';
 import fs from 'fs';
+import { StringRecordId } from 'surrealdb';
 
 export function createSmartFileReadTools(store: IStore, repoPath: string, budget: TokenBudgetManager) {
   return [
@@ -116,7 +117,8 @@ export async function executeStrategy(
 }
 
 async function interfaceOnlyStrategy(relPath: string, absPath: string, fileId: string, store: IStore) {
-  const symbols = await store.query<any>('SELECT * FROM symbol WHERE fileId = $fileId ORDER BY startLine ASC', { fileId });
+  const recordId = typeof fileId === 'string' ? new StringRecordId(fileId) : fileId;
+  const symbols = await store.query<any>('SELECT * FROM symbol WHERE fileId = $fileId ORDER BY startLine ASC', { fileId: recordId });
   const lines = fileCache.getLines(absPath);
   
   // Get imports (lines before first symbol or first 50 lines)
@@ -160,7 +162,8 @@ async function interfaceOnlyStrategy(relPath: string, absPath: string, fileId: s
 }
 
 async function skeletonStrategy(relPath: string, absPath: string, fileId: string, store: IStore) {
-  const symbols = await store.query<any>('SELECT * FROM symbol WHERE fileId = $fileId ORDER BY startLine ASC', { fileId });
+  const recordId = typeof fileId === 'string' ? new StringRecordId(fileId) : fileId;
+  const symbols = await store.query<any>('SELECT * FROM symbol WHERE fileId = $fileId ORDER BY startLine ASC', { fileId: recordId });
   const lines = fileCache.getLines(absPath);
   
   const resultLines: string[] = [];
@@ -211,7 +214,8 @@ async function dependency_only_logic(relPath: string, absPath: string, fileId: s
   const imports = lines.filter(l => l.trim().startsWith('import') || l.trim().startsWith('require('));
   const exports = lines.filter(l => l.trim().startsWith('export '));
 
-  const symbols = await store.query<any>('SELECT id, name, kind FROM symbol WHERE fileId = $fileId AND kind IN ["function", "method", "class"]', { fileId });
+  const recordId = typeof fileId === 'string' ? new StringRecordId(fileId) : fileId;
+  const symbols = await store.query<any>('SELECT id, name, kind FROM symbol WHERE fileId = $fileId AND kind IN ["function", "method", "class"]', { fileId: recordId });
   
   const callGraph: string[] = [];
   for (const sym of symbols) {
@@ -246,20 +250,33 @@ async function dependencyOnlyStrategy(relPath: string, absPath: string, fileId: 
 }
 
 async function implementationOfStrategy(relPath: string, absPath: string, fileId: string, targetSymbol: string, store: IStore) {
-  // Look for exact match or name that ends with .targetSymbol (case-insensitive)
+  // Use proper RecordId for fileId if it's not already one
+  const recordId = typeof fileId === 'string' ? new StringRecordId(fileId) : fileId;
+
   const results = await store.query<any>(
     'SELECT * FROM symbol WHERE (string::lowercase(name) = string::lowercase($name) OR string::ends_with(string::lowercase(name), string::lowercase($suffix))) AND fileId = $fileId LIMIT 1', 
-    { name: targetSymbol, suffix: `.${targetSymbol}`, fileId }
+    { name: targetSymbol, suffix: `.${targetSymbol}`, fileId: recordId }
   );
   
-  if (results.length === 0) {
+  if (!results || results.length === 0) {
     // Fuzzy match
-    const allSymbols = await store.query<any>('SELECT name FROM symbol WHERE fileId = $fileId', { fileId });
-    const symbolNames = allSymbols.map(s => s.name);
+    const allSymbolsRes = await store.query<any>('SELECT name FROM symbol WHERE fileId = $fileId', { fileId: recordId });
+    const symbolNames = allSymbolsRes.map(s => s.name);
     const closest = findClosestMatch(targetSymbol, symbolNames);
     
     let msg = `Symbol '${targetSymbol}' not found in ${relPath}.`;
-    if (closest) msg += ` Did you mean '${closest}'?`;
+    if (closest) {
+       // Check if the closest match is actually an exact match (ignoring case)
+       if (closest.toLowerCase() === targetSymbol.toLowerCase()) {
+         // This is the weird case where the query failed but fuzzy match found it
+         // Let's try to get the full symbol for this closest match
+         const fallbackRes = await store.query<any>('SELECT * FROM symbol WHERE name = $name AND fileId = $fileId LIMIT 1', { name: closest, fileId: recordId });
+         if (fallbackRes && fallbackRes.length > 0) {
+           return await renderSymbol(fallbackRes[0], absPath, store);
+         }
+       }
+       msg += ` Did you mean '${closest}'?`;
+    }
     if (symbolNames.length > 0) {
       msg += `\nAvailable symbols in this file: ${symbolNames.join(', ')}`;
     }
@@ -271,14 +288,20 @@ async function implementationOfStrategy(relPath: string, absPath: string, fileId
     };
   }
 
-  const sym = results[0];
+  return await renderSymbol(results[0], absPath, store);
+}
+
+async function renderSymbol(sym: any, absPath: string, store: IStore) {
   const output: string[] = [];
 
   // If it's a method, try to find the parent class signature for context
   let parentId = sym.parentSymbolId;
   if (!parentId) {
     // Try range-based lookup
-    const parents = await store.query<any>('SELECT id, signature, name FROM symbol WHERE fileId = $fileId AND kind = "class" AND startLine < $start AND endLine > $end LIMIT 1', { fileId, start: sym.startLine, end: sym.endLine });
+    const parents = await store.query<any>(
+      'SELECT * FROM symbol WHERE kind = "class" AND startLine < $line AND endLine > $line AND fileId = $fileId LIMIT 1',
+      { line: sym.startLine, fileId: sym.fileId }
+    );
     if (parents.length > 0) {
       parentId = parents[0].id;
       const parent = parents[0];
