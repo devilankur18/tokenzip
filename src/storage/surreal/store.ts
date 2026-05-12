@@ -64,10 +64,22 @@ export class SurrealStore implements IStore {
     const nodeCount: Record<string, number> = {};
     const edgeCount: Record<string, number> = {};
     
+    // In our schema, we know which ones are relations
+    const relationTables = new Set([
+      'contains', 'imports', 'exports', 'calls', 'implements', 
+      'inherits', 'modifies', 'reads', 'references', 'depends_on', 
+      'modified_in', 'foreign_key', 'column_of', 'diagram_edge', 'workflow_transition'
+    ]);
+
     for (const [tableName, _] of Object.entries(tables)) {
       const countRes = await this.db.query<any[][]>(`SELECT count() FROM type::table($tb) GROUP ALL`, { tb: tableName });
       const count = countRes[0]?.[0]?.count || 0;
-      nodeCount[tableName] = count;
+      
+      if (relationTables.has(tableName)) {
+        edgeCount[tableName] = count;
+      } else {
+        nodeCount[tableName] = count;
+      }
     }
 
     return {

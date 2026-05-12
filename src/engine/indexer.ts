@@ -17,11 +17,52 @@ export class Indexer {
   private registry: ExtractorRegistry;
   private repoPath: string;
   private unresolvedEdges: EdgeIR[] = [];
+  private ignorePatterns: string[] = [];
 
   constructor(store: IStore, repoPath: string) {
     this.store = store;
     this.registry = new ExtractorRegistry();
     this.repoPath = repoPath;
+    this.loadGitIgnore();
+  }
+
+  private loadGitIgnore(): void {
+    const gitignorePath = path.join(this.repoPath, '.gitignore');
+    if (fs.existsSync(gitignorePath)) {
+      const content = fs.readFileSync(gitignorePath, 'utf8');
+      this.ignorePatterns = content
+        .split('\n')
+        .map(line => line.trim())
+        .filter(line => line && !line.startsWith('#'));
+    }
+    // Always ignore standard things
+    this.ignorePatterns.push(...Array.from(IGNORE_DIRS));
+  }
+
+  private isIgnored(filePath: string): boolean {
+    const relativePath = path.relative(this.repoPath, filePath);
+    
+    // Quick check for standard ignored dirs in the path
+    const parts = relativePath.split(path.sep);
+    if (parts.some(part => IGNORE_DIRS.has(part))) return true;
+
+    // Basic glob-to-regex conversion for .gitignore patterns
+    // This handles simple patterns like "*.log", "dist/", "node_modules"
+    for (const pattern of this.ignorePatterns) {
+      let regexStr = pattern
+        .replace(/\./g, '\\.')
+        .replace(/\*/g, '.*')
+        .replace(/\?/g, '.');
+      
+      if (pattern.endsWith('/')) {
+        regexStr += '.*';
+      }
+      
+      const regex = new RegExp(`(^|/)${regexStr}($|/)`);
+      if (regex.test(relativePath)) return true;
+    }
+
+    return false;
   }
 
   async indexCodebase(): Promise<void> {
@@ -51,17 +92,58 @@ export class Indexer {
     const parser = new Parser();
     parser.setLanguage(Lang);
 
+    console.log('\n📦 Initializing Repository...');
+    const repoName = path.basename(this.repoPath);
+    const repoId = `repository:${repoName.replace(/\W/g, '_')}`;
+    await this.store.createNode({
+      id: repoId,
+      type: 'repository',
+      name: repoName,
+      root: this.repoPath,
+    } as any);
+
+    process.stdout.write('🔍 Scanning files... ');
     const allFiles = this.getAllFiles(this.repoPath);
-    console.log(`🚀 Indexing ${allFiles.length} files...\n`);
+    console.log(`found ${allFiles.length} files.`);
+
+    console.log(`\n🚀 Indexing ${allFiles.length} files...`);
 
     let parsed = 0;
-    for (const filePath of allFiles) {
-      if (!this.registry.supportsFile(filePath)) continue;
+    let skipped = 0;
+    let startTime = Date.now();
 
+    for (let i = 0; i < allFiles.length; i++) {
+      const filePath = allFiles[i];
       const relativePath = path.relative(this.repoPath, filePath);
+
+      // Interactive progress line
+      if (i % 10 === 0 || i === allFiles.length - 1) {
+        const percent = Math.round(((i + 1) / allFiles.length) * 100);
+        process.stdout.write(`\r   [${percent}%] Processing: ${relativePath.padEnd(60).slice(0, 60)}...`);
+      }
+
+      if (this.isIgnored(filePath) || !this.registry.supportsFile(filePath)) {
+        skipped++;
+        continue;
+      }
+
       const code = fs.readFileSync(filePath, 'utf8');
       const hash = contentHash(code);
       const fileId = `file:${relativePath.replace(/\W/g, '_')}`;
+
+      // Identify/Create Module
+      const dirName = path.dirname(relativePath);
+      let moduleId: string | null = null;
+      if (dirName !== '.') {
+        moduleId = `module:${dirName.replace(/\W/g, '_')}`;
+        await this.store.createNode({
+          id: moduleId,
+          type: 'module',
+          name: path.basename(dirName),
+          path: dirName,
+        } as any);
+        await this.store.createEdge({ type: 'contains', from: repoId, to: moduleId } as any);
+      }
 
       // Check if file is already parsed and unmodified
       const existing = await this.store.getNode(fileId);
@@ -73,7 +155,6 @@ export class Indexer {
       try {
         tree = parser.parse(code);
       } catch (e) {
-        console.warn(`Failed to parse ${relativePath}`);
         continue;
       }
 
@@ -87,14 +168,13 @@ export class Indexer {
         contentHash: hash,
         tree,
         language: extractor.language,
-        moduleId: null, // Basic for now
+        moduleId,
       };
 
       const result = extractor.extract(ctx);
 
       // Clean old symbols and edges
-      await this.store.query('DELETE symbol WHERE file_id = $fileId', { fileId });
-      // Remove file
+      await this.store.query('DELETE symbol WHERE fileId = $fileId', { fileId: new StringRecordId(fileId) });
       await this.store.deleteNode(fileId);
 
       // Create file node
@@ -106,18 +186,33 @@ export class Indexer {
         size_bytes: Buffer.byteLength(code),
         language: extractor.language,
         ext: path.extname(filePath),
-        line_count: code.split('\\n').length,
+        line_count: code.split('\n').length,
         parse_status: result.parseErrors.length === 0 ? 'parsed' : 'partial',
         last_parsed: new Date(),
-      });
+        module_id: moduleId ? new StringRecordId(moduleId) : null,
+      } as any);
+
+      // Link Repo/Module -> File
+      await this.store.createEdge({
+        type: 'contains',
+        from: moduleId ?? repoId,
+        to: fileId
+      } as any);
 
       // Insert new symbols
       for (const symbol of result.symbols) {
-        await this.store.createNode({
+        const fullSymbol = {
           ...symbol,
           type: 'symbol',
           fileId: new StringRecordId(fileId),
-        });
+        };
+        await this.store.createNode(fullSymbol as any);
+        
+        await this.store.createEdge({
+          type: 'contains',
+          from: fileId,
+          to: symbol.id
+        } as any);
       }
 
       for (const edge of result.edges) {
@@ -127,37 +222,54 @@ export class Indexer {
       parsed++;
     }
 
-    console.log(`✅ Indexing complete. Parsed ${parsed} files.`);
+    const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+    process.stdout.write(`\r✅ Indexing complete! Parsed ${parsed} files, skipped ${skipped} in ${duration}s.\n`);
 
     // Git metadata extraction
     if (this.store instanceof SurrealStore) {
-      const git = new GitExtractor(this.repoPath);
-      await git.extractHistory(this.store);
+      process.stdout.write('📜 Extracting Git history... ');
+      try {
+        const git = new GitExtractor(this.repoPath);
+        await git.extractHistory(this.store);
+        console.log('done.');
+      } catch (e) {
+        console.log('skipped (not a git repo).');
+      }
     }
     
     if (this.unresolvedEdges.length > 0) {
-      console.log(`\n🔄 Resolving ${this.unresolvedEdges.length} edges...`);
+      process.stdout.write(`\n🔄 Resolving ${this.unresolvedEdges.length} edges... `);
       await this.resolveEdges();
-      console.log(`✅ Edge resolution complete.`);
+      console.log('done.');
     }
+
+    console.log('\n✨ Codebase Knowledge Graph is ready!');
   }
 
   private getAllFiles(dirPath: string, arrayOfFiles: string[] = []): string[] {
-    const files = fs.readdirSync(dirPath);
-    files.forEach((file) => {
-      const fullPath = path.join(dirPath, file);
-      if (fs.statSync(fullPath).isDirectory()) {
-        if (!IGNORE_DIRS.has(file)) this.getAllFiles(fullPath, arrayOfFiles);
-      } else {
-        arrayOfFiles.push(fullPath);
-      }
-    });
+    try {
+      const files = fs.readdirSync(dirPath);
+      files.forEach((file) => {
+        const fullPath = path.join(dirPath, file);
+        try {
+          if (fs.statSync(fullPath).isDirectory()) {
+            if (!IGNORE_DIRS.has(file)) this.getAllFiles(fullPath, arrayOfFiles);
+          } else {
+            arrayOfFiles.push(fullPath);
+          }
+        } catch (e) {
+          // Skip individual files/dirs with permission issues
+        }
+      });
+    } catch (e) {
+      console.warn(`⚠️  Skipping inaccessible directory: ${dirPath}`);
+    }
     return arrayOfFiles;
   }
 
   private async resolveEdges(): Promise<void> {
     for (const edge of this.unresolvedEdges) {
-      if (edge.type === 'calls') {
+      if (edge.type === 'calls' || edge.type === 'inherits' || edge.type === 'implements') {
         const targetName = edge.metadata?.targetName as string;
         if (!targetName) continue;
         
@@ -167,7 +279,7 @@ export class Indexer {
         
         for (const target of matches) {
           await this.store.createEdge({
-            type: 'calls',
+            type: edge.type,
             from: edge.from,
             to: target.id,
           } as any);

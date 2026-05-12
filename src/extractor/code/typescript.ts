@@ -61,7 +61,7 @@ export class TypeScriptExtractor extends BaseExtractor {
           fileId,
           name,
           kind: 'class',
-          signature: ctx.content.slice(node.startIndex, node.endIndex).split('\\n')[0],
+          signature: ctx.content.slice(node.startIndex, node.endIndex).split('\n')[0],
           startLine: node.startPosition.row + 1,
           endLine: node.endPosition.row + 1,
           startCol: node.startPosition.column,
@@ -71,6 +71,39 @@ export class TypeScriptExtractor extends BaseExtractor {
           modifiers: [],
           metadata: {},
         });
+
+        // Extract inherits (extends)
+        const heritage = node.childForFieldName('heritage');
+        if (heritage) {
+          const extendsClause = heritage.descendantsOfType('extends_clause')[0];
+          if (extendsClause) {
+            const baseClass = extendsClause.child(1)?.text;
+            if (baseClass) {
+              edges.push({
+                type: 'inherits',
+                from: id,
+                to: `unresolved_symbol:${baseClass}`,
+                metadata: { targetName: baseClass },
+                isResolved: false
+              });
+            }
+          }
+
+          // Extract implements
+          const implementsClause = heritage.descendantsOfType('implements_clause')[0];
+          if (implementsClause) {
+            const interfaces = implementsClause.descendantsOfType('type_identifier');
+            for (const iface of interfaces) {
+              edges.push({
+                type: 'implements',
+                from: id,
+                to: `unresolved_symbol:${iface.text}`,
+                metadata: { targetName: iface.text },
+                isResolved: false
+              });
+            }
+          }
+        }
 
         this.extractCalls(node, id, edges);
       },

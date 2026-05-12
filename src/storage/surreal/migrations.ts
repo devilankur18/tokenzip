@@ -11,13 +11,16 @@ DEFINE FIELD OVERWRITE root ON repository TYPE string;
 DEFINE FIELD OVERWRITE created_at ON repository TYPE datetime DEFAULT time::now();
 DEFINE FIELD OVERWRITE updated_at ON repository TYPE datetime DEFAULT time::now();
 DEFINE FIELD OVERWRITE stats ON repository TYPE object DEFAULT { files: 0, modules: 0, symbols: 0 };
+DEFINE FIELD OVERWRITE stats.files ON repository TYPE int DEFAULT 0;
+DEFINE FIELD OVERWRITE stats.modules ON repository TYPE int DEFAULT 0;
+DEFINE FIELD OVERWRITE stats.symbols ON repository TYPE int DEFAULT 0;
 
 DEFINE TABLE OVERWRITE module SCHEMAFULL;
 DEFINE FIELD OVERWRITE name ON module TYPE string;
 DEFINE FIELD OVERWRITE path ON module TYPE option<string>;
 DEFINE FIELD OVERWRITE manifest_type ON module TYPE option<string>;
 DEFINE FIELD OVERWRITE language ON module TYPE option<string>;
-DEFINE FIELD OVERWRITE is_root ON module TYPE bool DEFAULT false;
+DEFINE FIELD OVERWRITE is_root ON module TYPE option<bool> DEFAULT false;
 DEFINE FIELD OVERWRITE metadata ON module TYPE option<object>;
 DEFINE FIELD OVERWRITE repository_id ON module TYPE option<record<repository>>;
 

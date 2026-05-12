@@ -6,18 +6,34 @@ export function createStructureTools(store: IStore, repoPath: string, budget: To
   return [
     {
       name: 'query_repo_structure',
-      description: 'Get an overview of the repository files and modules.',
+      description: 'Get a hierarchical overview of the repository (Modules -> Files -> Symbols).',
       inputSchema: {
         type: 'object',
-        properties: {},
+        properties: {
+          depth: { type: 'number', default: 2, description: 'Depth of the hierarchy to explore' }
+        },
         required: [],
       },
-      handler: async () => {
-        // Fetch files and modules
-        const files = await store.query('SELECT * FROM file LIMIT 1000');
-        const modules = await store.query('SELECT * FROM module LIMIT 100');
+      handler: async (args: any) => {
+        const depth = args.depth ?? 2;
         
-        const response = budget.truncate({ modules, files });
+        // Find root repository
+        const repos = await store.query('SELECT id, name FROM repository LIMIT 1');
+        if (repos.length === 0) {
+          return { content: [{ type: 'text', text: 'Repository not initialized. Run `tokenzip init` first.' }], isError: true };
+        }
+        
+        const rootId = repos[0].id;
+        
+        // Fetch hierarchical structure using contains relations
+        const structure = await store.query(`
+          SELECT 
+            id, name, type, path,
+            (SELECT id, name, type, path FROM ->contains LIMIT 50) as children
+          FROM type::record($rootId)
+        `, { rootId });
+        
+        const response = budget.truncate({ structure: structure[0] });
         return {
           content: [{ type: 'text', text: JSON.stringify(response, null, 2) }],
         };

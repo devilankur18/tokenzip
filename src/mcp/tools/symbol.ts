@@ -25,7 +25,7 @@ export function createSymbolTools(store: IStore, repoPath: string, budget: Token
     },
     {
       name: 'find_references',
-      description: 'Find all symbols that call or reference a specific symbol.',
+      description: 'Find all symbols that call, reference, extend, or implement a specific symbol.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -41,10 +41,30 @@ export function createSymbolTools(store: IStore, repoPath: string, budget: Token
         }
         
         const targetIds = targets.map(t => t.id);
-        // Find symbols that have a 'calls' edge to any of these targets
-        const callers = await store.query('SELECT *, (SELECT path FROM file WHERE id = $parent.fileId)[0].path as filePath FROM symbol WHERE id IN (SELECT in FROM calls WHERE out IN $targets)', { targets: targetIds });
         
-        const response = budget.truncate({ symbol: args.symbol_name, references: callers });
+        // Find symbols that have ANY of these relations to our targets
+        const callers = await store.query(`
+          SELECT *, 
+                 (SELECT path FROM file WHERE id = $parent.fileId)[0].path as filePath,
+                 (SELECT type FROM ANY WHERE out IN $targets AND in = $parent.id)[0].type as relationType
+          FROM symbol 
+          WHERE id IN (
+            SELECT in FROM calls WHERE out IN $targets
+            UNION
+            SELECT in FROM inherits WHERE out IN $targets
+            UNION
+            SELECT in FROM implements WHERE out IN $targets
+            UNION
+            SELECT in FROM references WHERE out IN $targets
+          )
+        `, { targets: targetIds });
+        
+        const response = budget.truncate({ 
+          symbol: args.symbol_name, 
+          referenceCount: callers.length,
+          references: callers 
+        });
+        
         return {
           content: [{ type: 'text', text: JSON.stringify(response, null, 2) }],
         };
