@@ -6,11 +6,10 @@ import { GitExtractor } from '../extractor/git.js';
 import { ExtractorRegistry } from '../extractor/registry.js';
 import { contentHash } from '../utils/hash.js';
 import { Parser, Language } from 'web-tree-sitter';
-import { StringRecordId } from 'surrealdb';
-
 import { EdgeIR } from '../extractor/types.js';
 import { Worker } from 'node:worker_threads';
 import os from 'node:os';
+import { RecordId, StringRecordId } from 'surrealdb';
 
 const IGNORE_DIRS = new Set(['node_modules', '.git', 'dist', 'build', '.next', '.tokenzip']);
 
@@ -49,63 +48,84 @@ export class Indexer {
 
     const parts = relativePath.split(path.sep);
     
-    // Quick check for standard ignored dirs
+    // 1. Quick check for standard hardcoded ignored dirs
     if (parts.some(part => IGNORE_DIRS.has(part))) return true;
 
+    // 2. Check against .gitignore patterns
     for (const pattern of this.ignorePatterns) {
-      // Normalize pattern
-      const p = pattern.startsWith('/') ? pattern.slice(1) : pattern;
+      const isRootRelative = pattern.startsWith('/');
+      const p = isRootRelative ? pattern.slice(1) : pattern;
+      const cleanPattern = pattern.endsWith('/') ? p.slice(0, -1) : p;
       
-      // Handle directory-only patterns (ending in /)
-      if (pattern.endsWith('/')) {
-        const dirPattern = p.slice(0, -1);
-        if (parts.includes(dirPattern)) return true;
-        if (relativePath.startsWith(p)) return true;
+      // Handle simple non-glob patterns
+      if (!cleanPattern.includes('*')) {
+        if (isRootRelative) {
+          // Must match from the root
+          if (relativePath === cleanPattern || relativePath.startsWith(cleanPattern + path.sep)) return true;
+        } else {
+          // Matches any part of the path
+          if (parts.includes(cleanPattern)) return true;
+        }
       }
-      
-      // Simple exact match for any path segment
-      if (parts.includes(p)) return true;
 
-      // Handle simple globs like *.log or build/*
-      if (p.includes('*')) {
-        const regexStr = p
+      // Handle globs
+      if (cleanPattern.includes('*') || cleanPattern.includes('?')) {
+        const regexStr = cleanPattern
           .replace(/\./g, '\\.')
           .replace(/\*\*/g, '.*')
           .replace(/\*/g, '[^/]*')
           .replace(/\?/g, '.');
         
-        const regex = new RegExp(`(^|/)${regexStr}($|/)`);
+        const regex = new RegExp(isRootRelative ? `^${regexStr}($|/)` : `(^|/)${regexStr}($|/)`);
         if (regex.test(relativePath)) return true;
-      } else {
-        // Path prefix match (e.g. "dist" matches "dist/main.js")
-        if (relativePath === p || relativePath.startsWith(p + path.sep)) return true;
       }
     }
 
     return false;
   }
 
+  private toRecordId(id: string): RecordId {
+    const [table, ...rest] = id.split(':');
+    return new RecordId(table, rest.join(':'));
+  }
+
+  private createdModules = new Set<string>();
+
   private async saveResult(msg: any, repoId: string): Promise<void> {
     const { filePath, hash, result, codeLength, lineCount, language, ext } = msg;
     const relativePath = path.relative(this.repoPath, filePath);
-    const fileId = `file:${relativePath.replace(/\W/g, '_')}`;
+    const fileIdStr = `file:${relativePath.replace(/\W/g, '_')}`;
+    const fileId = this.toRecordId(fileIdStr);
+    const repoRid = this.toRecordId(repoId);
 
     // Identify/Create Module
     const dirName = path.dirname(relativePath);
-    let moduleId: string | null = null;
+    let moduleId: RecordId | null = null;
+    
     if (dirName !== '.') {
-      moduleId = `module:${dirName.replace(/\W/g, '_')}`;
-      await this.store.createNode({
-        id: moduleId,
-        type: 'module',
-        name: path.basename(dirName),
-        path: dirName,
-      } as any);
-      await this.store.createEdge({ type: 'contains', from: repoId, to: moduleId } as any);
+      const moduleIdStr = `module:${dirName.replace(/\W/g, '_')}`;
+      moduleId = this.toRecordId(moduleIdStr);
+      
+      if (!this.createdModules.has(moduleIdStr)) {
+        await this.store.query(`
+          UPSERT $id CONTENT {
+            type: 'module',
+            name: $name,
+            path: $path,
+          };
+          RELATE $repoRid->contains->$id SET last_updated = time::now();
+        `, {
+          id: moduleId,
+          name: path.basename(dirName),
+          path: dirName,
+          repoRid
+        });
+        this.createdModules.add(moduleIdStr);
+      }
     }
 
     // Check if file is already parsed and unmodified
-    const existing = await this.store.getNode(fileId);
+    const existing = await this.store.getNode(fileIdStr);
     if (existing && existing.content_hash === hash) {
       return; // Unmodified
     }
@@ -115,13 +135,14 @@ export class Indexer {
       return true;
     });
 
-    // Clean old symbols and edges
-    await this.store.query('DELETE symbol WHERE fileId = $fileId', { fileId: new StringRecordId(fileId) });
-    await this.store.deleteNode(fileId);
+    // Build one big query for the file and its symbols
+    let batchQuery = 'BEGIN TRANSACTION;\n';
+    
+    // Delete old symbols
+    batchQuery += `DELETE symbol WHERE fileId = $fileId;\n`;
 
-    // Create file node
-    await this.store.createNode({
-      id: fileId,
+    const parseStatus = result.parseErrors.length === 0 ? 'parsed' : 'partial';
+    const fileData: any = {
       type: 'file',
       path: relativePath,
       content_hash: hash,
@@ -129,34 +150,62 @@ export class Indexer {
       language: language,
       ext: ext,
       line_count: lineCount,
-      parse_status: result.parseErrors.length === 0 ? 'parsed' : 'partial',
+      parse_status: parseStatus,
       last_parsed: new Date(),
-      module_id: moduleId ? new StringRecordId(moduleId) : null,
-    } as any);
+    };
+    if (moduleId) {
+      fileData.module_id = moduleId;
+    }
 
-    // Link Repo/Module -> File
-    await this.store.createEdge({
-      type: 'contains',
-      from: moduleId ?? repoId,
-      to: fileId
-    } as any);
+    // Create file node
+    batchQuery += `
+      UPSERT $fileId CONTENT $fileData;
+      RELATE $parentRepoOrModule->contains->$fileId SET last_updated = time::now();
+    `;
 
     // Insert new symbols
-    for (const symbol of publicSymbols) {
-      const fullSymbol = {
-        ...symbol,
-        type: 'symbol',
-        fileId: new StringRecordId(fileId)
-      } as any;
-      delete fullSymbol.isInternal;
+    const vars: any = {
+      fileId,
+      fileData,
+      parentRepoOrModule: moduleId || repoRid,
+    };
 
-      await this.store.createNode(fullSymbol);
+    for (let i = 0; i < publicSymbols.length; i++) {
+      const sym = publicSymbols[i];
+      const symVarName = `sym${i}`;
+      const symId = this.toRecordId(sym.id);
       
-      await this.store.createEdge({
-        type: 'contains',
-        from: fileId,
-        to: symbol.id
-      } as any);
+      vars[symVarName] = {
+        name: sym.name,
+        kind: sym.kind,
+        signature: sym.signature,
+        startLine: sym.startLine,
+        endLine: sym.endLine,
+        startCol: sym.startCol,
+        endCol: sym.endCol,
+        isExported: sym.isExported,
+        modifiers: sym.modifiers,
+        metadata: sym.metadata,
+        type: 'symbol',
+        fileId: fileId
+      };
+
+      batchQuery += `UPSERT $${symVarName}_id CONTENT $${symVarName};\n`;
+      vars[`${symVarName}_id`] = symId;
+      batchQuery += `RELATE $fileId->contains->$${symVarName}_id;\n`;
+    }
+
+    batchQuery += 'COMMIT TRANSACTION;';
+
+    if (this.store instanceof SurrealStore) {
+      try {
+        await this.store.batch(batchQuery, vars);
+      } catch (e: any) {
+        // Silently fail or log to a dedicated logger in production
+        // console.error(`❌ Error saving ${filePath}: ${e.message}`);
+      }
+    } else {
+      await this.store.createNode({ id: fileIdStr, ...vars } as any);
     }
 
     for (const edge of result.edges) {
@@ -351,59 +400,130 @@ export class Indexer {
   }
 
   private async resolveEdges(): Promise<void> {
-    for (const edge of this.unresolvedEdges) {
-      if (edge.type === 'calls' || edge.type === 'inherits' || edge.type === 'implements') {
-        const targetName = edge.metadata?.targetName as string;
-        if (!targetName) continue;
-        
-        // Exact name match
-        const q = `SELECT * FROM symbol WHERE name = $targetName LIMIT 5`;
-        const matches = await this.store.query<any>(q, { targetName });
-        
-        for (const target of matches) {
-          await this.store.createEdge({
-            type: edge.type,
-            from: edge.from,
-            to: target.id,
-          } as any);
-        }
-      } else if (edge.type === 'imports') {
-        const source = edge.metadata?.source as string;
-        if (!source) continue;
-        
-        if (source.startsWith('.')) {
-          // Relative path
-          const fromFileId = edge.from.replace('file:', '');
-          const dir = path.dirname(fromFileId);
-          const resolvedPath = path.join(dir, source);
-          
-          const q = `SELECT id FROM file WHERE path CONTAINS $resolvedPath LIMIT 1`;
-          const matches = await this.store.query<any>(q, { resolvedPath });
-          
-          for (const match of matches) {
-            await this.store.createEdge({
-              type: 'imports',
-              from: edge.from,
-              to: match.id,
-            } as any);
-          }
-        } else {
-          // Module/Package
-          const modId = `module:${source.replace(/\W/g, '_')}`;
-          await this.store.updateNode(modId, {
-            id: modId,
-            type: 'module',
-            name: source,
-          } as any);
-          
-          await this.store.createEdge({
-            type: 'imports',
-            from: edge.from,
-            to: modId,
-          } as any);
+    const total = this.unresolvedEdges.length;
+    if (total === 0) return;
+
+    process.stdout.write(`\n🔄 Resolving ${total} edges... `);
+    
+    // 1. Fetch all files to speed up relative import resolution
+    const allFiles = await this.store.query<any>('SELECT id, path FROM file');
+    const fileByPathMap = new Map<string, string>();
+    for (const f of allFiles) {
+      fileByPathMap.set(f.path, f.id.toString());
+    }
+
+    const CHUNK_SIZE = 1000;
+    let processed = 0;
+
+    for (let i = 0; i < total; i += CHUNK_SIZE) {
+      const chunk = this.unresolvedEdges.slice(i, i + CHUNK_SIZE);
+      const batchVars: Record<string, any> = {};
+      let batchQuery = 'BEGIN TRANSACTION;\n';
+      
+      // 2. Pre-fetch 'from' file paths (actually we have them in fileByPathMap now, 
+      // but we need to map ID -> Path for resolution)
+      const idToPathMap = new Map<string, string>();
+      for (const [p, id] of fileByPathMap.entries()) {
+        idToPathMap.set(id, p);
+      }
+
+      // 3. Pre-fetch symbols for calls/inherits/implements in this chunk
+      const targetNames = [...new Set(chunk
+        .filter(e => ['calls', 'inherits', 'implements'].includes(e.type))
+        .map(e => e.metadata?.targetName as string)
+        .filter(Boolean))];
+      
+      let symbolMap = new Map<string, any[]>();
+      if (targetNames.length > 0) {
+        const symbols = await this.store.query<any>('SELECT id, name FROM symbol WHERE name IN $targetNames', { targetNames });
+        for (const sym of symbols) {
+          if (!symbolMap.has(sym.name)) symbolMap.set(sym.name, []);
+          symbolMap.get(sym.name)!.push(sym);
         }
       }
+
+      // 4. Resolve and build RELATE statements
+      for (let j = 0; j < chunk.length; j++) {
+        const edge = chunk[j];
+        const fromIdStr = this.toRecordId(edge.from).toString();
+
+        if (['calls', 'inherits', 'implements'].includes(edge.type)) {
+          const targetName = edge.metadata?.targetName as string;
+          const matches = symbolMap.get(targetName) || [];
+          
+          for (let k = 0; k < Math.min(matches.length, 5); k++) {
+            const target = matches[k];
+            const varName = `e_${j}_${k}`;
+            batchQuery += `RELATE $${varName}_from->${edge.type}->$${varName}_to;\n`;
+            batchVars[`${varName}_from`] = this.toRecordId(edge.from);
+            batchVars[`${varName}_to`] = target.id;
+          }
+        } else if (edge.type === 'imports') {
+          const source = edge.metadata?.source as string;
+          if (!source) continue;
+
+          if (source.startsWith('.')) {
+            const fromPath = idToPathMap.get(fromIdStr);
+            if (!fromPath) continue;
+
+            const dir = path.dirname(fromPath);
+            const resolvedPath = path.join(dir, source);
+            
+            // Try different extensions
+            const candidates = [
+                resolvedPath,
+                resolvedPath + '.ts',
+                resolvedPath + '.tsx',
+                resolvedPath + '.js',
+                resolvedPath + '.jsx',
+                path.join(resolvedPath, 'index.ts'),
+                path.join(resolvedPath, 'index.js'),
+            ];
+            
+            let targetId: string | null = null;
+            for (const cand of candidates) {
+                const normalized = cand.replace(/\\/g, '/');
+                if (fileByPathMap.has(normalized)) {
+                    targetId = fileByPathMap.get(normalized)!;
+                    break;
+                }
+            }
+
+            if (targetId) {
+              const varName = `imp_${j}`;
+              batchQuery += `RELATE $${varName}_from->imports->$${varName}_to;\n`;
+              batchVars[`${varName}_from`] = this.toRecordId(edge.from);
+              batchVars[`${varName}_to`] = this.toRecordId(targetId);
+            }
+          } else {
+            const modIdStr = `module:${source.replace(/\W/g, '_')}`;
+            const modId = this.toRecordId(modIdStr);
+            
+            const varName = `mod_${j}`;
+            batchQuery += `
+              UPSERT $${varName}_mod CONTENT { type: 'module', name: $${varName}_name };
+              RELATE $${varName}_from->imports->$${varName}_mod;
+            `;
+            batchVars[`${varName}_mod`] = modId;
+            batchVars[`${varName}_name`] = source;
+            batchVars[`${varName}_from`] = this.toRecordId(edge.from);
+          }
+        }
+      }
+
+      batchQuery += 'COMMIT TRANSACTION;';
+      if (batchQuery !== 'BEGIN TRANSACTION;\nCOMMIT TRANSACTION;') {
+        await this.store.batch(batchQuery, batchVars);
+      }
+
+      processed += chunk.length;
+      if (i % (CHUNK_SIZE * 5) === 0 || processed === total) {
+        const pct = Math.round((processed / total) * 100);
+        process.stdout.write(`\r🔄 Resolving ${total} edges... [${pct}%]`);
+      }
     }
+
+    process.stdout.write(' done.\n');
     this.unresolvedEdges = [];
   }
 }

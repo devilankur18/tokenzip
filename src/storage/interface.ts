@@ -35,6 +35,7 @@ export interface IStore {
   ): Promise<GraphResult>;
 
   // Bulk Operations
+  batch(queryStr: string, vars?: Record<string, unknown>): Promise<any[]>;
   batchUpsert(nodes: GraphNode[], edges: GraphEdge[]): Promise<void>;
 
   // Search

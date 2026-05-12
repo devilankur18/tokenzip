@@ -1,7 +1,7 @@
 import { Command } from 'commander';
 import { SurrealStore } from '../../storage/surreal/store.js';
 import { resolveDbPath } from '../resolve-db.js';
-import { executeStrategy } from '../../mcp/tools/smart-file-read.js';
+import { calculateAllMetrics } from '../../mcp/tools/smart-file-read.js';
 import { TokenBudgetManager } from '../../mcp/token-budget.js';
 import { ReportGenerator, FileMetric } from '../../engine/report-generator.js';
 import path from 'path';
@@ -30,40 +30,44 @@ export const reportCommand = new Command('report')
       const metrics: FileMetric[] = [];
       let processed = 0;
 
-      for (const file of files) {
-        const absPath = path.resolve(repoPath, file.path);
-        if (!fs.existsSync(absPath)) continue;
+      const concurrency = 20;
+      const chunks = [];
+      for (let i = 0; i < files.length; i += concurrency) {
+        chunks.push(files.slice(i, i + concurrency));
+      }
 
-        const content = fs.readFileSync(absPath, 'utf8');
-        const naiveTokens = budget.estimate(content);
-        const folder = path.dirname(file.path);
+      for (const chunk of chunks) {
+        await Promise.all(chunk.map(async (file: any) => {
+          const absPath = path.resolve(repoPath, file.path);
+          if (!fs.existsSync(absPath)) return;
 
-        // Execute strategies
-        const [interfaceRes, skeletonRes, dependencyRes] = await Promise.all([
-          executeStrategy('interface_only', file.path, absPath, file.id, store, undefined, budget, 10000, false),
-          executeStrategy('skeleton', file.path, absPath, file.id, store, undefined, budget, 10000, false),
-          executeStrategy('dependency_only', file.path, absPath, file.id, store, undefined, budget, 10000, false)
-        ]);
+          try {
+            const content = fs.readFileSync(absPath, 'utf8');
+            const naiveTokens = budget.estimate(content);
+            const folder = path.dirname(file.path);
 
-        const iUsed = interfaceRes.tokensUsed || 0;
-        const sUsed = skeletonRes.tokensUsed || 0;
-        const dUsed = dependencyRes.tokensUsed || 0;
+            // Execute strategies in parallel for this file
+            const results = await calculateAllMetrics(file.path, absPath, file.id, store, budget);
 
-        metrics.push({
-          path: file.path,
-          folder: folder === '.' ? '/' : folder,
-          naiveTokens,
-          interfaceTokens: iUsed,
-          skeletonTokens: sUsed,
-          dependencyTokens: dUsed,
-          interfaceSaving: naiveTokens > 0 ? Math.floor(((naiveTokens - iUsed) / naiveTokens) * 100) : 0,
-          skeletonSaving: naiveTokens > 0 ? Math.floor(((naiveTokens - sUsed) / naiveTokens) * 100) : 0
-        });
-
-        processed++;
-        if (processed % 10 === 0 || processed === files.length) {
-          process.stdout.write(`\r   Progress: ${processed}/${files.length} files...`);
-        }
+            metrics.push({
+              path: file.path,
+              folder: folder === '.' ? '/' : folder,
+              naiveTokens,
+              interfaceTokens: results.interfaceTokens,
+              skeletonTokens: results.skeletonTokens,
+              dependencyTokens: results.dependencyTokens,
+              interfaceSaving: naiveTokens > 0 ? Math.floor(((naiveTokens - results.interfaceTokens) / naiveTokens) * 100) : 0,
+              skeletonSaving: naiveTokens > 0 ? Math.floor(((naiveTokens - results.skeletonTokens) / naiveTokens) * 100) : 0
+            });
+          } catch (e) {
+            // Skip problematic files in report
+          } finally {
+            processed++;
+            if (processed % 10 === 0 || processed === files.length) {
+              process.stdout.write(`\r   Progress: ${processed}/${files.length} files...`);
+            }
+          }
+        }));
       }
 
       console.log('\n✨ Analysis complete. Generating files...');

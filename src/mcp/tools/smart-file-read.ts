@@ -87,6 +87,35 @@ export function createSmartFileReadTools(store: IStore, repoPath: string, budget
   ];
 }
 
+export async function calculateAllMetrics(
+  relPath: string,
+  absPath: string,
+  fileId: string,
+  store: IStore,
+  budget: TokenBudgetManager
+) {
+  const recordId = typeof fileId === 'string' ? new StringRecordId(fileId) : fileId;
+  const symbols = await store.query<any>('SELECT * FROM symbol WHERE fileId = $fileId ORDER BY startLine ASC', { fileId: recordId });
+  
+  // We can't easily call the private strategy functions here without refactoring
+  // But we can call executeStrategy and it will use the cache if we implement one
+  // Or for now, we just accept the 3 queries but parallelized.
+  
+  // Wait, I'll just refactor the strategies to be exported.
+  
+  const [iRes, sRes, dRes] = await Promise.all([
+    interfaceOnlyStrategy(relPath, absPath, fileId, store, false, symbols),
+    skeletonStrategy(relPath, absPath, fileId, store, false, symbols),
+    dependencyOnlyStrategy(relPath, absPath, fileId, store, symbols)
+  ]);
+
+  return {
+    interfaceTokens: budget.estimate(iRes.content),
+    skeletonTokens: budget.estimate(sRes.content),
+    dependencyTokens: budget.estimate(dRes.content),
+  };
+}
+
 export async function executeStrategy(
   mode: string,
   relPath: string,
@@ -96,24 +125,25 @@ export async function executeStrategy(
   targetSymbol: string | undefined,
   budget: TokenBudgetManager,
   maxTokens: number,
-  includeDocs: boolean = false
+  includeDocs: boolean = false,
+  preFetchedSymbols?: any[]
 ): Promise<{ content: string; mode_used: string; symbol_count: number; tokensUsed: number; warnings?: string[] }> {
   let result: any;
   switch (mode) {
     case 'interface_only':
-      result = await interfaceOnlyStrategy(relPath, absPath, fileId, store, includeDocs);
+      result = await interfaceOnlyStrategy(relPath, absPath, fileId, store, includeDocs, preFetchedSymbols);
       break;
     case 'skeleton':
-      result = await skeletonStrategy(relPath, absPath, fileId, store, includeDocs);
+      result = await skeletonStrategy(relPath, absPath, fileId, store, includeDocs, preFetchedSymbols);
       break;
     case 'dependency_only':
-      result = await dependencyOnlyStrategy(relPath, absPath, fileId, store);
+      result = await dependencyOnlyStrategy(relPath, absPath, fileId, store, preFetchedSymbols);
       break;
     case 'implementation_of':
       result = await implementationOfStrategy(relPath, absPath, fileId, targetSymbol || '', store, includeDocs);
       break;
     default:
-      result = await interfaceOnlyStrategy(relPath, absPath, fileId, store, includeDocs);
+      result = await interfaceOnlyStrategy(relPath, absPath, fileId, store, includeDocs, preFetchedSymbols);
   }
 
   return {
@@ -122,9 +152,9 @@ export async function executeStrategy(
   };
 }
 
-async function interfaceOnlyStrategy(relPath: string, absPath: string, fileId: string, store: IStore, includeDocs: boolean) {
+async function interfaceOnlyStrategy(relPath: string, absPath: string, fileId: string, store: IStore, includeDocs: boolean, preFetchedSymbols?: any[]) {
   const recordId = typeof fileId === 'string' ? new StringRecordId(fileId) : fileId;
-  const symbols = await store.query<any>('SELECT * FROM symbol WHERE fileId = $fileId ORDER BY startLine ASC', { fileId: recordId });
+  const symbols = preFetchedSymbols || await store.query<any>('SELECT * FROM symbol WHERE fileId = $fileId ORDER BY startLine ASC', { fileId: recordId });
   const lines = fileCache.getLines(absPath);
   
   // Get imports (lines before first symbol or first 50 lines)
@@ -167,9 +197,9 @@ async function interfaceOnlyStrategy(relPath: string, absPath: string, fileId: s
   };
 }
 
-async function skeletonStrategy(relPath: string, absPath: string, fileId: string, store: IStore, includeDocs: boolean) {
+async function skeletonStrategy(relPath: string, absPath: string, fileId: string, store: IStore, includeDocs: boolean, preFetchedSymbols?: any[]) {
   const recordId = typeof fileId === 'string' ? new StringRecordId(fileId) : fileId;
-  const symbols = await store.query<any>('SELECT * FROM symbol WHERE fileId = $fileId ORDER BY startLine ASC', { fileId: recordId });
+  const symbols = preFetchedSymbols || await store.query<any>('SELECT * FROM symbol WHERE fileId = $fileId ORDER BY startLine ASC', { fileId: recordId });
   const lines = fileCache.getLines(absPath);
   
   const resultLines: string[] = [];
@@ -226,21 +256,38 @@ async function skeletonStrategy(relPath: string, absPath: string, fileId: string
   };
 }
 
-async function dependency_only_logic(relPath: string, absPath: string, fileId: string, store: IStore) {
+async function dependency_only_logic(relPath: string, absPath: string, fileId: string, store: IStore, preFetchedSymbols?: any[]) {
   const lines = fileCache.getLines(absPath);
   const imports = lines.filter(l => l.trim().startsWith('import') || l.trim().startsWith('require('));
   const exports = lines.filter(l => l.trim().startsWith('export '));
 
   const recordId = typeof fileId === 'string' ? new StringRecordId(fileId) : fileId;
-  const symbols = await store.query<any>('SELECT id, name, kind FROM symbol WHERE fileId = $fileId AND kind IN ["function", "method", "class"]', { fileId: recordId });
+  const symbols = preFetchedSymbols 
+    ? preFetchedSymbols.filter(s => ["function", "method", "class"].includes(s.kind))
+    : await store.query<any>('SELECT id, name, kind FROM symbol WHERE fileId = $fileId AND kind IN ["function", "method", "class"]', { fileId: recordId });
   
   const callGraph: string[] = [];
-  for (const sym of symbols) {
-    // Query calls where this symbol is the source (in)
-    const calls = await store.query<any>('SELECT metadata.targetName as target FROM calls WHERE in = $symId LIMIT 5', { symId: sym.id });
-    if (calls.length > 0) {
-      const targets = calls.map(c => c.target).filter(Boolean).join(', ');
-      callGraph.push(`// ${sym.kind} '${sym.name}' calls: ${targets}`);
+  if (symbols.length > 0) {
+    const symIds = symbols.map(s => s.id);
+    const allCalls = await store.query<any>(
+      'SELECT in, metadata.targetName as target FROM calls WHERE in IN $symIds',
+      { symIds }
+    );
+    
+    // Group calls by symbol
+    const callsMap = new Map<string, string[]>();
+    for (const call of allCalls) {
+      const inId = call.in.toString();
+      if (!callsMap.has(inId)) callsMap.set(inId, []);
+      if (call.target) callsMap.get(inId)!.push(call.target);
+    }
+
+    for (const sym of symbols) {
+      const targets = callsMap.get(sym.id.toString());
+      if (targets && targets.length > 0) {
+        const uniqueTargets = [...new Set(targets)].slice(0, 5).join(', ');
+        callGraph.push(`// ${sym.kind} '${sym.name}' calls: ${uniqueTargets}`);
+      }
     }
   }
 
@@ -262,8 +309,8 @@ async function dependency_only_logic(relPath: string, absPath: string, fileId: s
   };
 }
 
-async function dependencyOnlyStrategy(relPath: string, absPath: string, fileId: string, store: IStore) {
-    return await dependency_only_logic(relPath, absPath, fileId, store);
+async function dependencyOnlyStrategy(relPath: string, absPath: string, fileId: string, store: IStore, preFetchedSymbols?: any[]) {
+    return await dependency_only_logic(relPath, absPath, fileId, store, preFetchedSymbols);
 }
 
 async function implementationOfStrategy(relPath: string, absPath: string, fileId: string, targetSymbol: string, store: IStore, includeDocs: boolean) {

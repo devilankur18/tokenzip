@@ -215,6 +215,14 @@ export class SurrealStore implements IStore {
     return res[0] || [];
   }
 
+  /**
+   * Executes multiple statements in a single call.
+   * Useful for transactions or high-volume inserts.
+   */
+  async batch(queryStr: string, vars?: Record<string, unknown>): Promise<any[]> {
+    return await this.db.query(queryStr, vars) as any[];
+  }
+
   async graphTraversal(
     startId: string,
     edgeTypes: string[],
