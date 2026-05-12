@@ -226,6 +226,39 @@ async function skeletonStrategy(relPath: string, absPath: string, fileId: string
       }
     }
   }
+  
+  // 1.5. Hide standalone large comment blocks if documentation is not requested
+  if (!includeDocs) {
+    let commentBlockStart = -1;
+    for (let i = 1; i <= lines.length; i++) {
+      const line = lines[i - 1].trim();
+      const isComment = line.startsWith('//') || line.startsWith('/*') || line.startsWith('*') || line.startsWith('*/');
+      
+      if (isComment && !hiddenLines.has(i)) {
+        if (commentBlockStart === -1) commentBlockStart = i;
+      } else {
+        if (commentBlockStart !== -1) {
+          const blockLen = i - commentBlockStart;
+          if (blockLen > 3) {
+            // Hide middle of the comment block
+            for (let j = commentBlockStart + 1; j < i - 1; j++) {
+              hiddenLines.add(j);
+            }
+          }
+          commentBlockStart = -1;
+        }
+      }
+    }
+    // Handle case where file ends with a comment block
+    if (commentBlockStart !== -1) {
+      const blockLen = lines.length + 1 - commentBlockStart;
+      if (blockLen > 3) {
+        for (let j = commentBlockStart + 1; j < lines.length; j++) {
+          hiddenLines.add(j);
+        }
+      }
+    }
+  }
 
   // 2. PROTECT structural lines (signatures of nested symbols)
   // We want to make sure that even if a line is inside a hidden body, 
