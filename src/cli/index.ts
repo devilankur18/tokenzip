@@ -6,6 +6,7 @@ import { parseCommand } from './commands/parse.js';
 import { serveCommand } from './commands/serve.js';
 import { resetCommand } from './commands/reset.js';
 import { searchCommand } from './commands/search.js';
+import { readSymbolCommand } from './commands/read-symbol.js';
 import { mcpCommand } from './commands/mcp.js';
 
 const program = new Command();
@@ -34,6 +35,7 @@ program.addCommand(parseCommand);
 program.addCommand(serveCommand);
 program.addCommand(resetCommand);
 program.addCommand(searchCommand);
+program.addCommand(readSymbolCommand);
 program.addCommand(mcpCommand);
 
 program.parseAsync(process.argv).catch(err => {

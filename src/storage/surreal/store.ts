@@ -98,7 +98,7 @@ export class SurrealStore implements IStore {
       }
     }
     const recordId = typeof id === 'string' ? new StringRecordId(id) : id;
-    const res = await this.db.query<T[][]>(`UPSERT type::record($id) CONTENT $data;`, { 
+    const res = await this.db.query<T[][]>(`UPSERT type::record($id) MERGE $data;`, { 
       id: recordId,
       data: { ...data }
     });

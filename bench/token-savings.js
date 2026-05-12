@@ -47,7 +47,19 @@ function readFileChars(filePath) {
   }
 }
 
-async function tokenzipSearch(query, limit = 5) {
+function readCodeRange(filePath, range) {
+  try {
+    const content = readFileSync(filePath, 'utf8');
+    const lines = content.split('\n');
+    const start = Math.max(0, range.startLine - 1);
+    const end = Math.min(lines.length, range.endLine);
+    return lines.slice(start, end).join('\n');
+  } catch {
+    return '';
+  }
+}
+
+async function tokenzipSearch(query, limit = 5, includeBody = false) {
   // Simulate the search command output
   const q = `
     SELECT 
@@ -58,19 +70,19 @@ async function tokenzipSearch(query, limit = 5) {
     LIMIT $limit;
   `;
   const results = await store.query(q, { query, limit });
-  return JSON.stringify(results, null, 2);
-}
-
-function tokenzipStats() {
-  try {
-    const out = execSync(
-      `${CLI} search __IMPOSSIBLE_QUERY__ --cwd "${BENCH_REPO}" 2>&1 || true`,
-      { encoding: 'utf8', timeout: 5000 }
-    );
-    return out;
-  } catch {
-    return '';
+  
+  if (includeBody) {
+    for (const sym of results) {
+      if (sym.filePath) {
+        sym.body = readCodeRange(join(BENCH_REPO, sym.filePath), { 
+          startLine: sym.startLine, 
+          endLine: sym.endLine 
+        });
+      }
+    }
   }
+
+  return JSON.stringify(results, null, 2);
 }
 
 // ─── colour helpers ─────────────────────────────────────────────────────────
@@ -98,7 +110,8 @@ function getAllFiles(dir, ext = ['.js', '.ts']) {
     if (!existsSync(d)) return;
     for (const f of readdirSync(d)) {
       const full = join(d, f);
-      if (['node_modules', '.git', 'test', 'examples', 'docs', '.tokenzip'].includes(f)) continue;
+      // Don't skip subdirectories unless they are hidden or node_modules
+      if (['node_modules', '.git', '.tokenzip'].includes(f)) continue;
       if (statSync(full).isDirectory()) { walk(full); continue; }
       if (ext.some(e => full.endsWith(e))) results.push(full);
     }
@@ -110,101 +123,90 @@ function getAllFiles(dir, ext = ['.js', '.ts']) {
 // ─── scenarios ──────────────────────────────────────────────────────────────
 
 console.log(W('━'.repeat(70)));
-console.log(W('  🗜️  TokenZip Token Savings Benchmark'));
+console.log(W('  🗜️  TokenZip Token Savings Benchmark (Realistic Mode)'));
 console.log(W(`  Repo: ${BENCH_REPO}`));
 console.log(W('━'.repeat(70)));
 
 const allFiles = getAllFiles(BENCH_REPO);
-console.log(DIM(`\n  Repo has ${allFiles.length} source files\n`));
+console.log(DIM(`\n  Repo has ${allFiles.length} source files (including tests/examples)\n`));
 
 const results = [];
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SCENARIO 1: Understand what the Router class does
-// Naive: paste lib/router/index.js (or similar)
-// TokenZip: search "Router"
+// SCENARIO 1: Understand what the Application class does
+// Naive: paste application.js
+// TokenZip: search "Application" + get bodies of top matches
 // ─────────────────────────────────────────────────────────────────────────────
 {
-  const label = 'S1: "What does the Router class do?"';
-  const naiveFiles = allFiles.filter(f => 
-    f.includes('router') && (f.endsWith('index.js') || f.endsWith('router.js'))
-  );
+  const label = 'S1: "What does the Application class do?"';
+  const naiveFiles = allFiles.filter(f => f.endsWith('application.js'));
+  const naiveChars = naiveFiles.reduce((acc, f) => acc + readFileChars(f), 0) || 10000;
+  process.stdout.write(`  ${B('Running')} ${label}...`);
+  const tzOut = await tokenzipSearch('Application', 3, true); // Include body for realism
+  const r = row(label, naiveChars, tzOut);
+  results.push(r);
+  console.log(`  ${G('done')}  (saved ${savings(r.naiveTok, r.tzTok)})`);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SCENARIO 2: How does ETag generation work?
+// Naive: paste lib/utils.js
+// TokenZip: search "etag" + get body
+// ─────────────────────────────────────────────────────────────────────────────
+{
+  const label = 'S2: "How does ETag generation work?"';
+  const naiveFiles = allFiles.filter(f => f.endsWith('utils.js'));
   const naiveChars = naiveFiles.reduce((acc, f) => acc + readFileChars(f), 0) || 5000;
   process.stdout.write(`  ${B('Running')} ${label}...`);
-  const tzOut = await tokenzipSearch('Router', 3);
+  const tzOut = await tokenzipSearch('etag', 2, true);
   const r = row(label, naiveChars, tzOut);
   results.push(r);
   console.log(`  ${G('done')}  (saved ${savings(r.naiveTok, r.tzTok)})`);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SCENARIO 2: What does the Application/app class expose?
-// Naive: paste application.js (the big one)
-// TokenZip: search "Application"
+// SCENARIO 3: What does normalizeType do?
+// Naive: paste lib/utils.js
+// TokenZip: search "normalizeType" + get body
 // ─────────────────────────────────────────────────────────────────────────────
 {
-  const label = 'S2: "What methods does Application expose?"';
-  const naiveFiles = allFiles.filter(f =>
-    f.endsWith('application.js') || f.endsWith('application.ts') || f.endsWith('app.js')
-  );
+  const label = 'S3: "What does normalizeType do?"';
+  const naiveFiles = allFiles.filter(f => f.endsWith('utils.js'));
   const naiveChars = naiveFiles.reduce((acc, f) => acc + readFileChars(f), 0) || 5000;
   process.stdout.write(`  ${B('Running')} ${label}...`);
-  const tzOut = await tokenzipSearch('Application', 5);
+  const tzOut = await tokenzipSearch('normalizeType', 1, true);
   const r = row(label, naiveChars, tzOut);
   results.push(r);
   console.log(`  ${G('done')}  (saved ${savings(r.naiveTok, r.tzTok)})`);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SCENARIO 3: What does the Layer match function do?
-// Naive: paste lib/router/layer.js
-// TokenZip: search "match"
+// SCENARIO 4: What does the request module expose? (Metadata only)
+// Naive: paste lib/request.js
+// TokenZip: search "request" (Metadata only - to see surface area)
 // ─────────────────────────────────────────────────────────────────────────────
 {
-  const label = 'S3: "What does Layer.match() do?"';
-  const naiveFiles = allFiles.filter(f =>
-    f.endsWith('layer.js') || f.endsWith('layer.ts')
-  );
-  const naiveChars = naiveFiles.reduce((acc, f) => acc + readFileChars(f), 0) || 3000;
+  const label = 'S4: "Request module surface area" (Metadata Only)';
+  const naiveFiles = allFiles.filter(f => f.endsWith('request.js'));
+  const naiveChars = naiveFiles.reduce((acc, f) => acc + readFileChars(f), 0) || 8000;
   process.stdout.write(`  ${B('Running')} ${label}...`);
-  const tzOut = await tokenzipSearch('match', 5);
+  const tzOut = await tokenzipSearch('request', 5, false); // Just metadata
   const r = row(label, naiveChars, tzOut);
   results.push(r);
   console.log(`  ${G('done')}  (saved ${savings(r.naiveTok, r.tzTok)})`);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SCENARIO 4: What does the request parsing look like?
-// Naive: paste all of lib/request.js
-// TokenZip: search "request"
+// SCENARIO 5: Cross-file connection: Who calls handle?
+// Naive: grep "handle" across repo or paste index.js + application.js
+// TokenZip: find_references (simulated by search + metadata)
 // ─────────────────────────────────────────────────────────────────────────────
 {
-  const label = 'S4: "What does the request module expose?"';
-  const naiveFiles = allFiles.filter(f =>
-    f.endsWith('request.js') || f.endsWith('request.ts')
-  );
-  const naiveChars = naiveFiles.reduce((acc, f) => acc + readFileChars(f), 0) || 4000;
+  const label = 'S5: Cross-file: "Who calls handle?"';
+  const naiveFiles = allFiles.filter(f => f.endsWith('index.js') || f.endsWith('application.js'));
+  const naiveChars = naiveFiles.reduce((acc, f) => acc + readFileChars(f), 0) || 15000;
   process.stdout.write(`  ${B('Running')} ${label}...`);
-  const tzOut = await tokenzipSearch('request', 5);
-  const r = row(label, naiveChars, tzOut);
-  results.push(r);
-  console.log(`  ${G('done')}  (saved ${savings(r.naiveTok, r.tzTok)})`);
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// SCENARIO 5: Full repo overview — worst case naive
-// Naive: first 50 lines of every source file
-// TokenZip: search "init" or "use" — top symbols that span the repo
-// ─────────────────────────────────────────────────────────────────────────────
-{
-  const label = 'S5: Full repo "What does this codebase do?"';
-  let naiveChars = 0;
-  for (const f of allFiles.slice(0, 30)) {
-    const content = readFileSync(f, 'utf8').split('\n').slice(0, 50).join('\n');
-    naiveChars += content.length;
-  }
-  process.stdout.write(`  ${B('Running')} ${label}...`);
-  const tzOut = await tokenzipSearch('use', 10);
+  const tzOut = await tokenzipSearch('handle', 5, false);
   const r = row(label, naiveChars, tzOut);
   results.push(r);
   console.log(`  ${G('done')}  (saved ${savings(r.naiveTok, r.tzTok)})`);
