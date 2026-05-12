@@ -310,6 +310,45 @@ export class TypeScriptExtractor extends BaseExtractor {
       'lexical_declaration': (node) => {
         this.extractVariables(node, symbols, fileId, ctx, edges, iifeBody);
       },
+      'call_expression': (node) => {
+        const fnNode = node.childForFieldName('function');
+        const fnName = fnNode?.text || '';
+        const args = node.childForFieldName('arguments');
+        
+        if (args) {
+          for (let i = 0; i < args.namedChildCount; i++) {
+            const arg = args.namedChild(i);
+            if (['arrow_function', 'function_expression'].includes(arg.type)) {
+              // Only index if large (>5 lines) or specifically for serve/addEventListener/test etc
+              const lineCount = arg.endPosition.row - arg.startPosition.row;
+              if (lineCount > 5 || ['serve', 'addListener', 'on', 'test', 'describe', 'it', 'app.', 'router.'].some(e => fnName.includes(e))) {
+                const name = `callback_${fnName || 'anon'}`;
+                const id = this.generateSymbolId(ctx.relativePath, name, 'function', arg.startPosition.row + 1);
+                
+                // Avoid duplicates if we already found this (unlikely with current visitors)
+                if (symbols.some(s => s.id === id)) continue;
+
+                symbols.push({
+                  id,
+                  fileId,
+                  name,
+                  kind: 'function',
+                  signature: this.getSignature(arg, ctx.content),
+                  startLine: arg.startPosition.row + 1,
+                  endLine: arg.endPosition.row + 1,
+                  startCol: arg.startPosition.column,
+                  endCol: arg.endPosition.column,
+                  isInternal: true,
+                  isExported: false,
+                  modifiers: [],
+                  metadata: { isCallback: true, parentCall: fnName },
+                });
+                this.extractCalls(arg, id, edges);
+              }
+            }
+          }
+        }
+      },
     });
 
     return { symbols, edges, parseErrors };
@@ -446,6 +485,13 @@ export class TypeScriptExtractor extends BaseExtractor {
     // For function/class declarations, they usually have a 'body' or 'statement_block'
     const body = node.childForFieldName('body') || node.descendantsOfType('statement_block')[0];
     
+    // Direct function/arrow expressions
+    if (['arrow_function', 'function_expression', 'class_expression'].includes(node.type)) {
+      if (body) {
+        return content.slice(node.startIndex, body.startIndex).trim();
+      }
+    }
+
     // Special handling for variables that are functions
     if (['variable_declaration', 'lexical_declaration'].includes(node.type)) {
       const decl = node.children.find((c: any) => c.type === 'variable_declarator');

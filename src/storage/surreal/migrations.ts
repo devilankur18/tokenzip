@@ -42,7 +42,7 @@ DEFINE FIELD OVERWRITE last_parsed ON file TYPE datetime;
 DEFINE FIELD OVERWRITE git_last_modified ON file TYPE option<datetime>;
 DEFINE FIELD OVERWRITE git_blame_summary ON file TYPE option<object>;
 
-DEFINE TABLE OVERWRITE symbol SCHEMAFULL;
+DEFINE TABLE OVERWRITE symbol SCHEMALESS;
 DEFINE FIELD OVERWRITE type ON symbol TYPE string DEFAULT 'symbol';
 DEFINE FIELD OVERWRITE fileId ON symbol TYPE record<file>;
 DEFINE FIELD OVERWRITE name ON symbol TYPE string;

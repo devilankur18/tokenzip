@@ -219,8 +219,8 @@ async function skeletonStrategy(relPath: string, absPath: string, fileId: string
       }
     }
     
-    // Hide bodies of functions and methods
-    if (['function', 'method'].includes(sym.kind) && sym.endLine > sym.startLine) {
+    // Hide bodies of functions, methods, and multi-line variables (objects/arrays)
+    if (['function', 'method', 'variable'].includes(sym.kind) && sym.endLine > sym.startLine) {
       for (let i = sym.startLine + 1; i < sym.endLine; i++) {
         hiddenLines.add(i);
       }
@@ -231,7 +231,7 @@ async function skeletonStrategy(relPath: string, absPath: string, fileId: string
   // We want to make sure that even if a line is inside a hidden body, 
   // if it's the START of another symbol, we show it.
   for (const sym of symbols) {
-    if (['function', 'method', 'class', 'interface', 'type', 'enum'].includes(sym.kind)) {
+    if (['function', 'method', 'class', 'interface', 'type', 'enum', 'variable'].includes(sym.kind)) {
       hiddenLines.delete(sym.startLine);
       // For single-line symbols, endLine is the same as startLine
       if (sym.endLine > sym.startLine) {
