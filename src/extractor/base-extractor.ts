@@ -48,6 +48,15 @@ export abstract class BaseExtractor {
     }
   }
 
+  protected runQuery(
+    language: any, 
+    node: SyntaxNode, 
+    queryString: string
+  ): any[] {
+    const query = language.query(queryString);
+    return query.matches(node);
+  }
+
   protected extractDocstring(node: SyntaxNode, content: string): { text: string; startLine: number; endLine: number } | null {
     let current: SyntaxNode | null = node;
     while (current) {

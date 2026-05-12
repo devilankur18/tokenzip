@@ -11,6 +11,7 @@ export class TypeScriptExtractor extends BaseExtractor {
     const parseErrors: ParseError[] = [];
 
     const fileId = this.generateFileId(ctx.relativePath);
+    const iifeBody = this.findTopLevelIIFE(ctx.tree.rootNode);
 
     this.walk(ctx.tree.rootNode, {
       'import_statement': (node) => {
@@ -37,7 +38,7 @@ export class TypeScriptExtractor extends BaseExtractor {
           fileId,
           name,
           kind: 'function',
-          signature: ctx.content.slice(node.startIndex, node.endIndex).split('\n')[0],
+          signature: this.getSignature(node, ctx.content),
           startLine: node.startPosition.row + 1,
           endLine: node.endPosition.row + 1,
           startCol: node.startPosition.column,
@@ -46,6 +47,7 @@ export class TypeScriptExtractor extends BaseExtractor {
             const doc = this.extractDocstring(node, ctx.content);
             return doc ? { docstring: doc.text, docStartLine: doc.startLine, docEndLine: doc.endLine } : {};
           })(),
+          isInternal: this.calculateInternal(node, iifeBody),
           isExported: this.isExported(node),
           modifiers: [],
           metadata: {},
@@ -64,7 +66,7 @@ export class TypeScriptExtractor extends BaseExtractor {
           fileId,
           name,
           kind: 'class',
-          signature: ctx.content.slice(node.startIndex, node.endIndex).split('\n')[0],
+          signature: this.getSignature(node, ctx.content),
           startLine: node.startPosition.row + 1,
           endLine: node.endPosition.row + 1,
           startCol: node.startPosition.column,
@@ -73,6 +75,7 @@ export class TypeScriptExtractor extends BaseExtractor {
             const doc = this.extractDocstring(node, ctx.content);
             return doc ? { docstring: doc.text, docStartLine: doc.startLine, docEndLine: doc.endLine } : {};
           })(),
+          isInternal: this.calculateInternal(node, iifeBody),
           isExported: this.isExported(node),
           modifiers: [],
           metadata: {},
@@ -124,7 +127,7 @@ export class TypeScriptExtractor extends BaseExtractor {
           fileId,
           name,
           kind: 'method',
-          signature: ctx.content.slice(node.startIndex, node.endIndex).split('\n')[0],
+          signature: this.getSignature(node, ctx.content),
           startLine: node.startPosition.row + 1,
           endLine: node.endPosition.row + 1,
           startCol: node.startPosition.column,
@@ -151,7 +154,7 @@ export class TypeScriptExtractor extends BaseExtractor {
           fileId,
           name,
           kind: 'enum',
-          signature: ctx.content.slice(node.startIndex, node.endIndex).split('\n')[0],
+          signature: this.getSignature(node, ctx.content),
           startLine: node.startPosition.row + 1,
           endLine: node.endPosition.row + 1,
           startCol: node.startPosition.column,
@@ -160,6 +163,7 @@ export class TypeScriptExtractor extends BaseExtractor {
             const doc = this.extractDocstring(node, ctx.content);
             return doc ? { docstring: doc.text, docStartLine: doc.startLine, docEndLine: doc.endLine } : {};
           })(),
+          isInternal: this.calculateInternal(node, iifeBody),
           isExported: this.isExported(node),
           modifiers: [],
           metadata: {},
@@ -176,7 +180,7 @@ export class TypeScriptExtractor extends BaseExtractor {
           fileId,
           name,
           kind: 'interface',
-          signature: ctx.content.slice(node.startIndex, node.endIndex).split('\n')[0],
+          signature: this.getSignature(node, ctx.content),
           startLine: node.startPosition.row + 1,
           endLine: node.endPosition.row + 1,
           startCol: node.startPosition.column,
@@ -185,6 +189,7 @@ export class TypeScriptExtractor extends BaseExtractor {
             const doc = this.extractDocstring(node, ctx.content);
             return doc ? { docstring: doc.text, docStartLine: doc.startLine, docEndLine: doc.endLine } : {};
           })(),
+          isInternal: this.calculateInternal(node, iifeBody),
           isExported: this.isExported(node),
           modifiers: [],
           metadata: {},
@@ -201,7 +206,7 @@ export class TypeScriptExtractor extends BaseExtractor {
           fileId,
           name,
           kind: 'type',
-          signature: ctx.content.slice(node.startIndex, node.endIndex).split('\n')[0],
+          signature: this.getSignature(node, ctx.content),
           startLine: node.startPosition.row + 1,
           endLine: node.endPosition.row + 1,
           startCol: node.startPosition.column,
@@ -210,6 +215,7 @@ export class TypeScriptExtractor extends BaseExtractor {
             const doc = this.extractDocstring(node, ctx.content);
             return doc ? { docstring: doc.text, docStartLine: doc.startLine, docEndLine: doc.endLine } : {};
           })(),
+          isInternal: this.calculateInternal(node, iifeBody),
           isExported: this.isExported(node),
           modifiers: [],
           metadata: {},
@@ -231,15 +237,20 @@ export class TypeScriptExtractor extends BaseExtractor {
           if (left?.type === 'member_expression' || left?.type === 'identifier') {
             const name = left.text;
             const id = this.generateSymbolId(ctx.relativePath, name, 'method', node.startPosition.row + 1);
-            const isInternal = this.isInsideFunction(node);
+            let isInternal = this.isInsideFunction(node);
+            if (isInternal && iifeBody && this.isNodeInside(node, iifeBody)) {
+              if (!this.isNestedDeeperThan(node, iifeBody)) {
+                isInternal = false;
+              }
+            }
             
             symbols.push({
               id,
               fileId,
               name,
               kind: 'method',
-              signature: ctx.content.slice(node.startIndex, node.endIndex).split('\n')[0],
-              isInternal,
+              signature: this.getSignature(node, ctx.content),
+              isInternal: this.calculateInternal(node, iifeBody),
               startLine: node.startPosition.row + 1,
               endLine: node.endPosition.row + 1,
               startCol: node.startPosition.column,
@@ -294,17 +305,17 @@ export class TypeScriptExtractor extends BaseExtractor {
         }
       },
       'variable_declaration': (node) => {
-        this.extractVariables(node, symbols, fileId, ctx, edges);
+        this.extractVariables(node, symbols, fileId, ctx, edges, iifeBody);
       },
       'lexical_declaration': (node) => {
-        this.extractVariables(node, symbols, fileId, ctx, edges);
+        this.extractVariables(node, symbols, fileId, ctx, edges, iifeBody);
       },
     });
 
     return { symbols, edges, parseErrors };
   }
 
-  private extractVariables(node: any, symbols: any[], fileId: string, ctx: any, edges: any[]) {
+  private extractVariables(node: any, symbols: any[], fileId: string, ctx: any, edges: any[], iifeBody?: any) {
     const declarators = node.descendantsOfType('variable_declarator');
     for (const decl of declarators) {
       const nameNode = decl.childForFieldName('name');
@@ -312,14 +323,15 @@ export class TypeScriptExtractor extends BaseExtractor {
       const name = nameNode.text;
       const id = this.generateSymbolId(ctx.relativePath, name, 'variable', decl.startPosition.row + 1);
       
+      let isInternal = this.calculateInternal(node, iifeBody);
+
       symbols.push({
         id,
         fileId,
         name,
         kind: 'variable',
-        signature: ctx.content.slice(node.startIndex, node.endIndex).split('\n')[0],
-        // Skip internal variables (very basic heuristic: if it's inside a function/method)
-        isInternal: this.isInsideFunction(node),
+        signature: this.getSignature(node, ctx.content),
+        isInternal,
         startLine: node.startPosition.row + 1,
         endLine: node.endPosition.row + 1,
         startCol: node.startPosition.column,
@@ -334,6 +346,36 @@ export class TypeScriptExtractor extends BaseExtractor {
       });
       this.extractCalls(decl, id, edges);
     }
+  }
+
+  private calculateInternal(node: any, iifeBody?: any): boolean {
+    let internal = this.isInsideFunction(node);
+    if (internal && iifeBody && this.isNodeInside(node, iifeBody)) {
+      if (!this.isNestedDeeperThan(node, iifeBody)) {
+        internal = false;
+      }
+    }
+    return internal;
+  }
+
+  private isNodeInside(node: any, container: any): boolean {
+    let curr = node.parent;
+    while (curr) {
+      if (curr.id === container.id) return true;
+      curr = curr.parent;
+    }
+    return false;
+  }
+
+  private isNestedDeeperThan(node: any, container: any): boolean {
+    let curr = node.parent;
+    while (curr && curr.id !== container.id) {
+      if (['function_declaration', 'function_expression', 'arrow_function', 'method_definition'].includes(curr.type)) {
+        return true;
+      }
+      curr = curr.parent;
+    }
+    return false;
   }
 
   private extractCalls(node: any, symbolId: string, edges: EdgeIR[]) {
@@ -370,5 +412,44 @@ export class TypeScriptExtractor extends BaseExtractor {
 
   private isExported(node: any): boolean {
     return node.parent?.type === 'export_statement';
+  }
+
+  private getSignature(node: any, content: string): string {
+    const body = node.childForFieldName('body') || node.descendantsOfType('statement_block')[0];
+    if (body) {
+      return content.slice(node.startIndex, body.startIndex).trim();
+    }
+    
+    // For variables, return the whole declaration. The interface strategy will truncate if too large.
+    if (['variable_declaration', 'lexical_declaration'].includes(node.type)) {
+      return content.slice(node.startIndex, node.endIndex).trim();
+    }
+
+    // Fallback to first line if no body found
+    return content.slice(node.startIndex, node.endIndex).split('\n')[0];
+  }
+
+  private findTopLevelIIFE(root: any): any | null {
+    for (let i = 0; i < root.namedChildCount; i++) {
+      const node = root.namedChild(i);
+      if (node.type === 'expression_statement') {
+        const call = node.firstNamedChild;
+        if (call?.type === 'call_expression') {
+          const fn = call.childForFieldName('function');
+          // Handle (() => {})()
+          if (fn?.type === 'parenthesized_expression') {
+            const inner = fn.firstNamedChild;
+            if (inner && ['arrow_function', 'function_expression'].includes(inner.type)) {
+              return inner.childForFieldName('body');
+            }
+          }
+          // Handle (function() {})() without parentheses (less common but possible)
+          if (fn && ['arrow_function', 'function_expression'].includes(fn.type)) {
+            return fn.childForFieldName('body');
+          }
+        }
+      }
+    }
+    return null;
   }
 }

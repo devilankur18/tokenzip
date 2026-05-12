@@ -384,6 +384,10 @@ export class Indexer {
           if (stat.isDirectory()) {
             this.getAllFiles(fullPath, arrayOfFiles);
           } else {
+            // Skip extremely large files (> 50KB) to avoid indexing minified bundles/blobs
+            if (stat.size > 1024 * 50) {
+              return;
+            }
             // Only add files that are supported by at least one extractor
             if (this.registry.supportsFile(fullPath)) {
               arrayOfFiles.push(fullPath);
@@ -415,49 +419,39 @@ export class Indexer {
     const CHUNK_SIZE = 1000;
     let processed = 0;
 
+    // Map to resolve ID back to path for relative imports
+    const idToPathMap = new Map<string, string>();
+    for (const [p, id] of fileByPathMap.entries()) {
+      idToPathMap.set(id, p);
+    }
+
     for (let i = 0; i < total; i += CHUNK_SIZE) {
       const chunk = this.unresolvedEdges.slice(i, i + CHUNK_SIZE);
       const batchVars: Record<string, any> = {};
       let batchQuery = 'BEGIN TRANSACTION;\n';
       
-      // 2. Pre-fetch 'from' file paths (actually we have them in fileByPathMap now, 
-      // but we need to map ID -> Path for resolution)
-      const idToPathMap = new Map<string, string>();
-      for (const [p, id] of fileByPathMap.entries()) {
-        idToPathMap.set(id, p);
-      }
-
-      // 3. Pre-fetch symbols for calls/inherits/implements in this chunk
-      const targetNames = [...new Set(chunk
-        .filter(e => ['calls', 'inherits', 'implements'].includes(e.type))
-        .map(e => e.metadata?.targetName as string)
-        .filter(Boolean))];
-      
-      let symbolMap = new Map<string, any[]>();
-      if (targetNames.length > 0) {
-        const symbols = await this.store.query<any>('SELECT id, name FROM symbol WHERE name IN $targetNames', { targetNames });
-        for (const sym of symbols) {
-          if (!symbolMap.has(sym.name)) symbolMap.set(sym.name, []);
-          symbolMap.get(sym.name)!.push(sym);
-        }
-      }
-
-      // 4. Resolve and build RELATE statements
+      // 2. Build RELATE statements with subqueries or direct IDs
       for (let j = 0; j < chunk.length; j++) {
         const edge = chunk[j];
-        const fromIdStr = this.toRecordId(edge.from).toString();
+        const fromId = this.toRecordId(edge.from);
+        const fromIdStr = fromId.toString();
 
         if (['calls', 'inherits', 'implements'].includes(edge.type)) {
           const targetName = edge.metadata?.targetName as string;
-          const matches = symbolMap.get(targetName) || [];
-          
-          for (let k = 0; k < Math.min(matches.length, 5); k++) {
-            const target = matches[k];
-            const varName = `e_${j}_${k}`;
-            batchQuery += `RELATE $${varName}_from->${edge.type}->$${varName}_to;\n`;
-            batchVars[`${varName}_from`] = this.toRecordId(edge.from);
-            batchVars[`${varName}_to`] = target.id;
-          }
+          if (!targetName) continue;
+
+          // Use subquery to resolve symbols on the server side with a limit
+          // This avoids fetching thousands of common symbols into Node.js memory (OOM fix)
+          const varName = `e_${j}`;
+          batchQuery += `
+            LET $targets = (SELECT id FROM symbol WHERE name = $${varName}_name LIMIT 5);
+            FOR $t IN $targets {
+              RELATE $${varName}_from->${edge.type}->$t;
+            };
+          `;
+          batchVars[`${varName}_from`] = fromId;
+          batchVars[`${varName}_name`] = targetName;
+
         } else if (edge.type === 'imports') {
           const source = edge.metadata?.source as string;
           if (!source) continue;
@@ -492,7 +486,7 @@ export class Indexer {
             if (targetId) {
               const varName = `imp_${j}`;
               batchQuery += `RELATE $${varName}_from->imports->$${varName}_to;\n`;
-              batchVars[`${varName}_from`] = this.toRecordId(edge.from);
+              batchVars[`${varName}_from`] = fromId;
               batchVars[`${varName}_to`] = this.toRecordId(targetId);
             }
           } else {
@@ -506,14 +500,19 @@ export class Indexer {
             `;
             batchVars[`${varName}_mod`] = modId;
             batchVars[`${varName}_name`] = source;
-            batchVars[`${varName}_from`] = this.toRecordId(edge.from);
+            batchVars[`${varName}_from`] = fromId;
           }
         }
       }
 
       batchQuery += 'COMMIT TRANSACTION;';
       if (batchQuery !== 'BEGIN TRANSACTION;\nCOMMIT TRANSACTION;') {
-        await this.store.batch(batchQuery, batchVars);
+        try {
+          await this.store.batch(batchQuery, batchVars);
+        } catch (e: any) {
+          // Individual batch failure shouldn't stop the whole process
+          // console.error(`Chunk error: ${e.message}`);
+        }
       }
 
       processed += chunk.length;

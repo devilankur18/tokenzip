@@ -169,10 +169,16 @@ async function interfaceOnlyStrategy(relPath: string, absPath: string, fileId: s
   }
 
   for (const sym of symbols) {
-    if (['interface', 'type', 'enum'].includes(sym.kind)) {
-      // Show full range for small type definitions
-      const content = fileCache.getRange(absPath, sym.startLine, sym.endLine).join('\n');
-      output.push(content);
+    if (['interface', 'type', 'enum', 'variable'].includes(sym.kind)) {
+      // Show full range for small type definitions, truncate if too large
+      const contentLines = fileCache.getRange(absPath, sym.startLine, sym.endLine);
+      if (contentLines.length > 30) {
+        output.push(contentLines.slice(0, 15).join('\n'));
+        output.push('    // ... [truncated large definition] ...');
+        output.push(contentLines.slice(-10).join('\n'));
+      } else {
+        output.push(contentLines.join('\n'));
+      }
     } else {
       // Show signature only
       if (includeDocs && sym.docstring) {
