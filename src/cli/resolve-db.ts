@@ -13,16 +13,16 @@ import fs from 'fs';
 export function resolveDbPath(cwd: string): { dbPath: string; repoPath: string } {
   const resolved = path.resolve(cwd);
 
-  // Case A: cwd has a `db/` subdirectory (we're inside .tokenzip or a similar container)
-  const directDb = path.join(resolved, 'db');
-  if (fs.existsSync(directDb) && fs.statSync(directDb).isDirectory()) {
-    // repoPath = same dir (project is self-contained here)
-    return { dbPath: directDb, repoPath: resolved };
+  // Case A: Are we inside a .tokenzip directory already?
+  if (resolved.endsWith('.tokenzip') || resolved.includes('/.tokenzip/')) {
+    const rootOfTokenzip = resolved.split('/.tokenzip')[0] + '/.tokenzip';
+    const db = path.join(rootOfTokenzip, 'db');
+    return { dbPath: db, repoPath: path.dirname(rootOfTokenzip) };
   }
 
-  // Case B: cwd has a `.tokenzip/db` subdirectory (standard project layout)
+  // Case B: Does cwd have a .tokenzip/db subdirectory?
   const standardDb = path.join(resolved, '.tokenzip', 'db');
-  if (fs.existsSync(standardDb) && fs.statSync(standardDb).isDirectory()) {
+  if (fs.existsSync(standardDb)) {
     return { dbPath: standardDb, repoPath: resolved };
   }
 

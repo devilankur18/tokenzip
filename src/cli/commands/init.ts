@@ -1,12 +1,13 @@
 import { Command } from 'commander';
 import fs from 'fs';
 import path from 'path';
-import { resolveDbPath } from '../resolve-db.js';
+const { resolve } = path;
 
 export const initCommand = new Command('init')
   .description('Initialize TokenZip in the current directory')
-  .action(() => {
-    const cwd = process.cwd();
+  .option('--cwd <dir>', 'Directory to initialize', process.cwd())
+  .action((options) => {
+    const cwd = resolve(options.cwd);
     const tokenzipDir = path.join(cwd, '.tokenzip');
     
     if (!fs.existsSync(tokenzipDir)) {

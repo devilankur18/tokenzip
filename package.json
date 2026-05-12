@@ -41,7 +41,11 @@
     "dev": "tsup --watch",
     "test": "vitest",
     "prepublishOnly": "npm run build",
-    "start": "node dist/cli/index.js"
+    "start": "node dist/cli/index.js",
+    "bench:setup": "bash bench/setup.sh",
+    "bench:savings": "node bench/token-savings.js",
+    "bench:mcp": "node bench/mcp-test.js",
+    "bench": "npm run bench:setup && npm run bench:savings && npm run bench:mcp"
   },
   "engines": {
     "node": ">=18.0.0"

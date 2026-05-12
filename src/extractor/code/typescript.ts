@@ -85,7 +85,7 @@ export class TypeScriptExtractor extends BaseExtractor {
           fileId,
           name,
           kind: 'method',
-          signature: ctx.content.slice(node.startIndex, node.endIndex).split('\\n')[0],
+          signature: ctx.content.slice(node.startIndex, node.endIndex).split('\n')[0],
           startLine: node.startPosition.row + 1,
           endLine: node.endPosition.row + 1,
           startCol: node.startPosition.column,
@@ -98,9 +98,42 @@ export class TypeScriptExtractor extends BaseExtractor {
 
         this.extractCalls(node, id, edges);
       },
+      'variable_declaration': (node) => {
+        this.extractVariables(node, symbols, fileId, ctx, edges);
+      },
+      'lexical_declaration': (node) => {
+        this.extractVariables(node, symbols, fileId, ctx, edges);
+      },
     });
 
     return { symbols, edges, parseErrors };
+  }
+
+  private extractVariables(node: any, symbols: any[], fileId: string, ctx: any, edges: any[]) {
+    const declarators = node.descendantsOfType('variable_declarator');
+    for (const decl of declarators) {
+      const nameNode = decl.childForFieldName('name');
+      if (!nameNode) continue;
+      const name = nameNode.text;
+      const id = this.generateSymbolId(ctx.relativePath, name, 'variable', decl.startPosition.row + 1);
+      
+      symbols.push({
+        id,
+        fileId,
+        name,
+        kind: 'variable',
+        signature: ctx.content.slice(node.startIndex, node.endIndex).split('\n')[0],
+        startLine: node.startPosition.row + 1,
+        endLine: node.endPosition.row + 1,
+        startCol: node.startPosition.column,
+        endCol: node.endPosition.column,
+        docstring: this.extractDocstring(node, ctx.content),
+        isExported: this.isExported(node),
+        modifiers: [],
+        metadata: {},
+      });
+      this.extractCalls(decl, id, edges);
+    }
   }
 
   private extractCalls(node: any, symbolId: string, edges: EdgeIR[]) {

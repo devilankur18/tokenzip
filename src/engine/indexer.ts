@@ -26,16 +26,25 @@ export class Indexer {
 
   async indexCodebase(): Promise<void> {
     await Parser.init();
-    // Try to find WASM either in local node_modules or in .tokenzip/node_modules
-    let wasmPath = path.resolve(this.repoPath, 'node_modules/tree-sitter-typescript/tree-sitter-tsx.wasm');
-    if (!fs.existsSync(wasmPath)) {
-      wasmPath = path.resolve(this.repoPath, '.tokenzip/node_modules/tree-sitter-typescript/tree-sitter-tsx.wasm');
-    }
+    // WASM grammar is part of the tokenzip package — resolve relative to this file's location.
+    // This works whether tokenzip is installed globally, locally, or run directly from source.
+    const selfDir = path.dirname(new URL(import.meta.url).pathname);
+    const candidates = [
+      // Case 1: In dist/ (standard layout)
+      path.resolve(selfDir, '../node_modules/tree-sitter-typescript/tree-sitter-tsx.wasm'),
+      // Case 2: In dist/cli/ (nested bundle)
+      path.resolve(selfDir, '../../node_modules/tree-sitter-typescript/tree-sitter-tsx.wasm'),
+      // Fallback: in the target repo's own node_modules
+      path.resolve(this.repoPath, 'node_modules/tree-sitter-typescript/tree-sitter-tsx.wasm'),
+      // Legacy: inside .tokenzip/node_modules
+      path.resolve(this.repoPath, '.tokenzip/node_modules/tree-sitter-typescript/tree-sitter-tsx.wasm'),
+    ];
+    const wasmPath = candidates.find(p => fs.existsSync(p)) ?? candidates[0];
     let Lang: Language;
     try {
       Lang = await Language.load(wasmPath);
     } catch (e) {
-      console.error('Failed to load WASM at', wasmPath);
+      console.error(`Failed to load WASM. Tried:\n  ${candidates.join('\n  ')}`);
       return;
     }
 

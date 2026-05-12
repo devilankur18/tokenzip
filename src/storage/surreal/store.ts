@@ -21,14 +21,20 @@ export class SurrealStore implements IStore {
   }
 
   async initialize(): Promise<void> {
-    const parent = path.dirname(this.dbPath);
-    if (!fs.existsSync(parent)) {
-      fs.mkdirSync(parent, { recursive: true });
+    if (!this.dbPath.startsWith('mem:')) {
+      const parent = path.dirname(this.dbPath);
+      if (!fs.existsSync(parent)) {
+        fs.mkdirSync(parent, { recursive: true });
+      }
     }
     
-    console.log(`Connecting to surreal db at ${this.dbPath}...`);
+    const connectionString = this.dbPath.includes('://') || this.dbPath.includes(':')
+      ? this.dbPath 
+      : `surrealkv:${this.dbPath}`;
+    
+    console.log(`Connecting to surreal db at ${connectionString}...`);
     try {
-      await this.db.connect(`surrealkv://${this.dbPath}`);
+      await this.db.connect(connectionString);
       console.log('Connected to surreal db!');
       await this.db.use({ namespace: 'tokenzip', database: 'graph' });
     } catch (err) {
@@ -80,7 +86,8 @@ export class SurrealStore implements IStore {
       }
     }
     const recordId = typeof id === 'string' ? new StringRecordId(id) : id;
-    const res = await this.db.query<T[][]>(`UPSERT ${recordId.toString()} CONTENT $data;`, { 
+    const res = await this.db.query<T[][]>(`UPSERT type::record($id) CONTENT $data;`, { 
+      id: recordId,
       data: { ...data }
     });
     return res[0][0];
@@ -95,7 +102,8 @@ export class SurrealStore implements IStore {
   }
 
   async getNode<T extends GraphNode>(id: string): Promise<T | null> {
-    const res = await this.db.query<T[][]>('SELECT * FROM type::record($id)', { id });
+    const recordId = typeof id === 'string' ? new StringRecordId(id) : id;
+    const res = await this.db.query<T[][]>('SELECT * FROM type::record($id)', { id: recordId });
     return res[0]?.[0] || null;
   }
 
@@ -116,7 +124,7 @@ export class SurrealStore implements IStore {
       }
     }
     const recordId = typeof id === 'string' ? new StringRecordId(id) : id;
-    const res = await this.db.query<T[][]>('UPSERT $id MERGE $data', { id: recordId, data });
+    const res = await this.db.query<T[][]>('UPSERT type::record($id) MERGE $data', { id: recordId, data });
     return res[0][0];
   }
 

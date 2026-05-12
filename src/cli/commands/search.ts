@@ -38,13 +38,13 @@ Output fields:
           fileId, isExported, docstring,
           (SELECT path FROM file WHERE id = $parent.fileId)[0].path AS filePath,
           (
-            SELECT out.name AS name, 
-                   (SELECT path FROM file WHERE id = $parent.fileId)[0].path AS file 
+            SELECT in.name AS name, 
+                   (SELECT path FROM file WHERE id = $parent.in.fileId)[0].path AS file 
             FROM calls WHERE out = $parent.id
           ) AS callers,
           (
-            SELECT in.name AS name,
-                   (SELECT path FROM file WHERE id = $parent.in.fileId)[0].path AS file 
+            SELECT out.name AS name,
+                   (SELECT path FROM file WHERE id = $parent.out.fileId)[0].path AS file 
             FROM calls WHERE in = $parent.id
           ) AS callees
         FROM symbol 

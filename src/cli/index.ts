@@ -5,6 +5,7 @@ import { parseCommand } from './commands/parse.js';
 import { serveCommand } from './commands/serve.js';
 import { resetCommand } from './commands/reset.js';
 import { searchCommand } from './commands/search.js';
+import { mcpCommand } from './commands/mcp.js';
 
 const program = new Command();
 
@@ -17,6 +18,7 @@ program
     '  tokenzip init      Initialize in current directory\n' +
     '  tokenzip parse     Index the codebase\n' +
     '  tokenzip search    Search for any symbol\n' +
+    '  tokenzip mcp       Directly test MCP tools\n' +
     '  tokenzip serve     Start the MCP server for AI copilots'
   )
   .version('2.0.0');
@@ -26,6 +28,7 @@ program.addCommand(parseCommand);
 program.addCommand(serveCommand);
 program.addCommand(resetCommand);
 program.addCommand(searchCommand);
+program.addCommand(mcpCommand);
 
 program.parseAsync(process.argv).catch(err => {
   console.error(err);
