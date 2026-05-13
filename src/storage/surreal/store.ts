@@ -17,7 +17,12 @@ export class SurrealStore implements IStore {
 
   constructor(dbPath: string, forcedPort?: number) {
     this.dbPath = dbPath;
-    this.db = new Surreal();
+    this.db = new Surreal({
+      engines: {
+        ...createRemoteEngines(),
+        ...createNodeEngines()
+      }
+    });
     this.forcedPort = forcedPort;
   }
 

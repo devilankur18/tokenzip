@@ -2,7 +2,7 @@
 # bench/setup.sh — Clone express and index it with the local TokenZip build
 set -e
 
-CLI="node /Users/ankur/dev/docx/docx-1/.tokenzip/dist/cli/index.js"
+CLI="node ./dist/cli/index.js"
 BENCH_REPO="/tmp/express-bench"
 
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

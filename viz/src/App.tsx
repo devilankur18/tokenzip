@@ -1,7 +1,20 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import ForceGraph2D from 'react-force-graph-2d';
 import { Surreal } from 'surrealdb';
-import { Search, Info, ZoomIn, ZoomOut, Maximize, MousePointer2 } from 'lucide-react';
+import { 
+  Search, 
+  Settings, 
+  Maximize2, 
+  Zap, 
+  Activity, 
+  FileCode, 
+  ChevronRight, 
+  Maximize, 
+  MousePointer2,
+  Info,
+  ZoomIn,
+  ZoomOut
+} from 'lucide-react';
 import './App.css';
 
 interface Node {
@@ -41,6 +54,7 @@ const App: React.FC = () => {
         await surreal.signin({ username: 'root', password: 'root' });
         await surreal.use({ namespace: 'tokenzip', database: 'graph' });
         setDb(surreal);
+        (window as any).db = surreal;
         fetchData(surreal);
       } catch (err) {
         console.error('Failed to connect to SurrealDB:', err);
@@ -99,21 +113,34 @@ const App: React.FC = () => {
 
     searchTimeout.current = setTimeout(async () => {
       try {
-        const res = await db.query<any[][]>(
-          'SELECT *, meta::table(id) as type FROM symbol, file WHERE name CONTAINS $q OR path CONTAINS $q LIMIT 10',
-          { q: searchTerm.toLowerCase() }
+        const query = searchTerm.toLowerCase();
+        const res = await db.query(
+          'SELECT * FROM symbol WHERE string::lowercase(name) CONTAINS $q LIMIT 10; SELECT * FROM file WHERE string::lowercase(path) CONTAINS $q LIMIT 10;',
+          { q: query }
         );
-        const nodes = (res[0] || []).map((n: any) => ({
+        console.log('SEARCH_RES:', res);
+        
+        const getResult = (r: any) => Array.isArray(r) ? r : (r?.result || []);
+
+        const symbols = getResult(res[0]).map((n: any) => ({
+          ...n,
           id: n.id.toString(),
-          type: n.type || (n.id.toString().startsWith('file:') ? 'file' : 'symbol'),
-          name: n.name || n.id.toString().split(':')[1] || n.id.toString(),
-          path: n.path,
-          signature: n.signature,
-          docs: n.doc,
-          val: n.id.toString().startsWith('file:') ? 8 : 3,
-          color: n.id.toString().startsWith('file:') ? '#6366f1' : '#a855f7'
+          type: 'symbol',
+          name: n.name,
+          val: 3,
+          color: '#a855f7'
         }));
-        setSearchResults(nodes);
+
+        const files = getResult(res[1]).map((n: any) => ({
+          ...n,
+          id: n.id.toString(),
+          type: 'file',
+          name: n.path.split('/').pop() || n.path,
+          val: 8,
+          color: '#6366f1'
+        }));
+
+        setSearchResults([...symbols, ...files].slice(0, 10));
       } catch (err) {
         console.error('Search error:', err);
       }
@@ -121,6 +148,33 @@ const App: React.FC = () => {
 
     return () => clearTimeout(searchTimeout.current);
   }, [searchTerm, db]);
+
+  const [edgeCounts, setEdgeCounts] = useState<{ in: number, out: number }>({ in: 0, out: 0 });
+
+  useEffect(() => {
+    if (!selectedNode || !db) return;
+    
+    const fetchCounts = async () => {
+      try {
+        const res = await db.query(
+          `SELECT count() as count FROM (
+            SELECT id FROM contains, imports, exports, calls, implements, inherits, modifies, reads, references, depends_on WHERE in = type::record($id)
+          ) GROUP ALL;
+          SELECT count() as count FROM (
+            SELECT id FROM contains, imports, exports, calls, implements, inherits, modifies, reads, references, depends_on WHERE out = type::record($id)
+          ) GROUP ALL;`,
+          { id: selectedNode.id }
+        );
+        const outCount = (res as any)?.[0]?.[0]?.count || 0;
+        const inCount = (res as any)?.[1]?.[0]?.count || 0;
+        setEdgeCounts({ in: inCount, out: outCount });
+      } catch (err) {
+        console.error('Failed to fetch edge counts:', err);
+      }
+    };
+    
+    fetchCounts();
+  }, [selectedNode, db]);
 
   const handleNodeClick = (node: any) => {
     // If node is not in current graph, we might need to fetch its neighborhood
@@ -138,15 +192,68 @@ const App: React.FC = () => {
     }
   };
 
+  const expandNeighbors = async (node: Node) => {
+    if (!db) return;
+    try {
+      const res = await db.query(
+        'SELECT *, in as source, out as target, meta::table(id) as type FROM contains, imports, exports, calls, implements, inherits, modifies, reads, references, depends_on WHERE in = type::record($id) OR out = type::record($id) LIMIT 200',
+        { id: node.id }
+      );
+      
+      const getResult = (r: any) => Array.isArray(r) ? r : [];
+      const newEdges = getResult(res[0]).map((e: any) => ({
+        id: e.id.toString(),
+        source: e.source.toString(),
+        target: e.target.toString(),
+        type: e.type || e.id.toString().split(':')[0]
+      }));
+
+      const neighborIds = new Set<string>();
+      newEdges.forEach(e => {
+        neighborIds.add(e.source);
+        neighborIds.add(e.target);
+      });
+
+      const neighborRes = await db.query(
+        'SELECT * FROM symbol, file WHERE id IN $ids',
+        { ids: Array.from(neighborIds) }
+      );
+
+      const newNodes = getResult(neighborRes[0]).map((n: any) => ({
+        ...n,
+        id: n.id.toString(),
+        type: n.id.toString().startsWith('file:') ? 'file' : 'symbol',
+        name: n.name || n.path?.split('/').pop() || n.id.toString().split(':')[1],
+        val: n.id.toString().startsWith('file:') ? 8 : 3,
+        color: n.id.toString().startsWith('file:') ? '#6366f1' : '#a855f7'
+      }));
+
+      setGraphData(prev => {
+        const existingNodeIds = new Set(prev.nodes.map(n => n.id));
+        const existingEdgeIds = new Set(prev.links.map(l => l.id));
+
+        const filteredNewNodes = newNodes.filter(n => !existingNodeIds.has(n.id));
+        const filteredNewEdges = newEdges.filter(e => !existingEdgeIds.has(e.id));
+
+        return {
+          nodes: [...prev.nodes, ...filteredNewNodes],
+          links: [...prev.links, ...filteredNewEdges]
+        };
+      });
+    } catch (err) {
+      console.error('Expansion error:', err);
+    }
+  };
+
   const getLinkColor = (link: Edge) => {
     switch (link.type) {
-      case 'calls': return '#f87171'; // Red
-      case 'contains': return '#818cf8'; // Indigo
-      case 'imports': return '#34d399'; // Emerald
-      case 'exports': return '#fbbf24'; // Amber
-      case 'implements': return '#22d3ee'; // Cyan
-      case 'references': return '#94a3b8'; // Slate
-      default: return 'rgba(255, 255, 255, 0.1)';
+      case 'calls': return '#f87171';
+      case 'contains': return '#818cf8';
+      case 'imports': return '#34d399';
+      case 'exports': return '#fbbf24';
+      case 'implements': return '#22d3ee';
+      case 'references': return '#94a3b8';
+      default: return 'rgba(255, 255, 255, 0.2)';
     }
   };
 
@@ -169,91 +276,152 @@ const App: React.FC = () => {
             linkDirectionalArrowRelPos={1}
             linkCurvature={0.25}
             onNodeClick={handleNodeClick}
-            backgroundColor="#0a0a0c"
+            backgroundColor="#0d0d12"
             linkColor={getLinkColor}
-            linkWidth={(link: any) => link === selectedNode ? 2 : 1}
+            linkWidth={(link: any) => (selectedNode && (link.source.id === selectedNode.id || link.target.id === selectedNode.id)) ? 2 : 1}
           />
 
           <div className="overlay">
-            <div className="panel">
+            <div className="panel sidebar">
               <div className="header">
-                <div className="logo">TokenZip Viz</div>
-                <div className="status-indicator">
-                  <div className="dot"></div>
-                  Connected: {dbPort}
+                <div className="logo-section">
+                  <Activity className="logo-icon" size={24} />
+                  <div className="logo-text">TokenZip<span>Viz</span></div>
+                </div>
+                <div className="status-badge">
+                  <div className="status-dot"></div>
+                  {dbPort}
                 </div>
               </div>
-              <input 
-                type="text" 
-                placeholder="Search symbols or files..." 
-                className="search-box"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
+              
+              <div className="search-container">
+                <Search className="search-icon" size={18} />
+                <input 
+                  type="text" 
+                  placeholder="Search repository..." 
+                  className="search-input"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+              </div>
+
               {searchTerm && (
-                <div className="search-results">
+                <div className="search-results-floating">
                   {searchResults.length > 0 ? (
                     searchResults.map(n => (
-                      <div key={n.id} className="search-item" onClick={() => handleNodeClick(n)}>
-                        <span className={`mini-dot type-${n.type}`}></span>
-                        <div className="search-item-info">
-                          <div className="search-item-name">{n.name}</div>
-                          {n.path && <div className="search-item-path">{n.path}</div>}
+                      <div key={n.id} className="search-result-card" onClick={() => handleNodeClick(n)}>
+                        <div className={`type-tag tag-${n.type}`}>{n.type}</div>
+                        <div className="result-info">
+                          <div className="result-name">{n.name}</div>
+                          {n.path && <div className="result-path">{n.path}</div>}
                         </div>
                       </div>
                     ))
                   ) : (
-                    <div className="search-no-results">No matches found in DB</div>
+                    <div className="no-results">No matches found in knowledge graph</div>
                   )}
                 </div>
               )}
 
-              <div className="legend">
-                <h4>Legend</h4>
-                <div className="legend-item"><span className="dot file"></span> File</div>
-                <div className="legend-item"><span className="dot symbol"></span> Symbol</div>
-                <div className="legend-divider"></div>
-                <div className="legend-item"><span className="line calls"></span> Calls</div>
-                <div className="legend-item"><span className="line contains"></span> Contains</div>
-                <div className="legend-item"><span className="line imports"></span> Imports</div>
+              <div className="legend-section">
+                <h4>GRAPH LEGEND</h4>
+                <div className="legend-group">
+                  <h5>Nodes</h5>
+                  <div className="legend-item"><span className="node-dot file"></span> File</div>
+                  <div className="legend-item"><span className="node-dot symbol"></span> Symbol</div>
+                </div>
+                <div className="legend-group">
+                  <h5>Edges</h5>
+                  <div className="legend-item"><span className="edge-line calls"></span> Calls</div>
+                  <div className="legend-item"><span className="edge-line contains"></span> Contains</div>
+                  <div className="legend-item"><span className="edge-line imports"></span> Imports</div>
+                  <div className="legend-item"><span className="edge-line implements"></span> Implements</div>
+                </div>
               </div>
             </div>
           </div>
 
           {selectedNode && (
-            <div className="details-panel panel">
-              <div className="node-info">
-                <span className={`node-type type-${selectedNode.type}`}>
-                  {selectedNode.type}
-                </span>
-                <h2>{selectedNode.name}</h2>
-                {selectedNode.path && <p className="node-path">{selectedNode.path}</p>}
+            <div className="details-panel glass-morphism">
+              <div className="details-header">
+                <div className="node-title">
+                  {selectedNode.type === 'file' ? <FileCode size={20} /> : <Zap size={20} />}
+                  <div>
+                    <h2>{selectedNode.name}</h2>
+                    <span className="node-id">{selectedNode.id}</span>
+                  </div>
+                </div>
+                <button className="close-panel" onClick={() => setSelectedNode(null)}>&times;</button>
               </div>
-              
-              {selectedNode.signature && (
-                <>
-                  <h3>Signature</h3>
-                  <div className="code-block">{selectedNode.signature}</div>
-                </>
-              )}
 
-              {selectedNode.docs && (
-                <>
-                  <h3>Documentation</h3>
-                  <p className="docs-text">{selectedNode.docs}</p>
-                </>
-              )}
+              <div className="details-scroll">
+                {selectedNode.path && (
+                  <div className="info-group">
+                    <label>FILE PATH</label>
+                    <div className="path-text">{selectedNode.path}</div>
+                  </div>
+                )}
 
-              <button className="btn" style={{marginTop: 'auto'}} onClick={() => setSelectedNode(null)}>
-                Close
-              </button>
+                <div className="stats-row">
+                  <div className="stat-item">
+                    <label>INCOMING</label>
+                    <div className="stat-value">{edgeCounts.in}</div>
+                  </div>
+                  <div className="stat-item">
+                    <label>OUTGOING</label>
+                    <div className="stat-value">{edgeCounts.out}</div>
+                  </div>
+                </div>
+
+                <div className="actions-group">
+                  <label>EXPLORATION ACTIONS</label>
+                  <div className="action-buttons">
+                    <button className="action-btn primary" onClick={() => expandNeighbors(selectedNode)}>
+                      <Maximize2 size={16} /> Expand Neighborhood
+                    </button>
+                    <button className="action-btn secondary" onClick={() => {
+                      const relatedEdges = graphData.links.filter(l => 
+                        (typeof l.source === 'object' ? l.source.id : l.source) === selectedNode.id || 
+                        (typeof l.target === 'object' ? l.target.id : l.target) === selectedNode.id
+                      );
+                      const relatedNodeIds = new Set([
+                        selectedNode.id, 
+                        ...relatedEdges.map(l => typeof l.source === 'object' ? l.source.id : l.source), 
+                        ...relatedEdges.map(l => typeof l.target === 'object' ? l.target.id : l.target)
+                      ]);
+                      setGraphData(prev => ({
+                        nodes: prev.nodes.filter(n => relatedNodeIds.has(n.id)),
+                        links: relatedEdges
+                      }));
+                    }}>
+                      <Maximize size={16} /> Isolate Context
+                    </button>
+                  </div>
+                </div>
+
+                {selectedNode.signature && (
+                  <div className="info-group">
+                    <label>CODE SIGNATURE</label>
+                    <div className="code-container">
+                      <pre><code>{selectedNode.signature}</code></pre>
+                    </div>
+                  </div>
+                )}
+
+                {selectedNode.docs && (
+                  <div className="info-group">
+                    <label>DOCUMENTATION</label>
+                    <div className="docs-text">{selectedNode.docs}</div>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
-          <div className="controls">
-            <button className="btn" onClick={() => fgRef.current.zoomToFit(400)}><Maximize size={16}/> Fit View</button>
-            <button className="btn" onClick={() => fgRef.current.zoom(fgRef.current.zoom() * 1.2)}><ZoomIn size={16}/> Zoom In</button>
-            <button className="btn" onClick={() => fgRef.current.zoom(fgRef.current.zoom() * 0.8)}><ZoomOut size={16}/> Zoom Out</button>
+          <div className="viewport-controls">
+            <button title="Fit View" onClick={() => fgRef.current.zoomToFit(400)}><Maximize size={18}/></button>
+            <button title="Zoom In" onClick={() => fgRef.current.zoom(fgRef.current.zoom() * 1.5)}><ZoomIn size={18}/></button>
+            <button title="Zoom Out" onClick={() => fgRef.current.zoom(fgRef.current.zoom() * 0.7)}><ZoomOut size={18}/></button>
           </div>
         </>
       )}
