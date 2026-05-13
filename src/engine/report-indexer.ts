@@ -4,6 +4,7 @@ import { IStore } from '../storage/interface.js';
 import { TokenBudgetManager } from '../mcp/token-budget.js';
 import { FileMetric } from './report-generator.js';
 import { executeStrategy } from '../mcp/tools/smart-file-read.js';
+import { fileCache } from '../utils/file-cache.js';
 
 export interface ReportOptions {
   directory?: string;
@@ -152,7 +153,9 @@ export class ReportIndexer {
               skeletonSaving: naiveTokens > 0 ? Math.floor(((naiveTokens - this.budget.estimate(sRes.content)) / naiveTokens) * 100) : 0
             });
           } catch (e: any) {
-            // Skip problematic files (e.g. not existing on disk but in DB)
+            if (processedCount === 0) {
+              console.error(`\n❌ Error processing ${file.path}: ${e.message}`);
+            }
           } finally {
             processedCount++;
             if (processedCount % 50 === 0 || processedCount === filteredFiles.length) {
