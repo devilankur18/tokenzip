@@ -156,10 +156,201 @@ function pruneMetadata(node: any, verbose: boolean): any {
 }
 
 
+async function executeStructureQuery(store: IStore, budget: TokenBudgetManager, args: any) {
+  const depth = args.depth ?? 2;
+  const adaptive = args.adaptive !== false;
+  const focusPath = args.path;
+  const showSymbols = args.showSymbols !== false;
+
+  const repos = await store.query<any>(`SELECT id, name, type, path FROM repository LIMIT 1`);
+  if (repos.length === 0) {
+    throw new Error('Repository not initialized. Run `tokenzip init` and `tokenzip parse` first.');
+  }
+  
+  const rootId = repos[0].id.toString();
+  
+  // Fetch stats to determine threshold
+  const statsRes = await store.query<any>('SELECT count() as count FROM file GROUP ALL');
+  const totalFiles = statsRes[0]?.count || 0;
+  const foldThreshold = totalFiles > 1000 ? 50 : 8;
+
+  // Fetch all contains edges
+  const allEdges = await store.query<any[]>(`SELECT * FROM contains`) || [];
+
+  // Collect all unique node IDs
+  const nodeIds = new Set<string>();
+  nodeIds.add(rootId);
+  for (const edge of allEdges) {
+    if (edge.out) nodeIds.add(edge.out.toString());
+    if (edge.in) nodeIds.add(edge.in.toString());
+  }
+
+  // Fetch all nodes
+  const idsAsRecords = Array.from(nodeIds).map(id => {
+    if (id.includes(':')) {
+      const [table, ...rest] = id.split(':');
+      return new RecordId(table, rest.join(':'));
+    }
+    return id;
+  });
+
+  const allNodes = (await store.query<any[]>(`SELECT * FROM $ids`, { ids: idsAsRecords })) || [];
+  
+  // Build the tree in memory
+  const nodeMap = new Map<string, any>();
+  for (const node of allNodes) {
+    if (!node || !node.id) continue;
+    const id = node.id.toString();
+    
+    let name = node.name;
+    if (!name && node.path) {
+      name = node.path.split('/').pop() || node.path;
+    }
+
+    nodeMap.set(id, {
+      id: id,
+      name: name,
+      type: node.type,
+      path: node.path,
+      kind: node.kind,
+      isExported: node.isExported,
+      children: []
+    });
+  }
+
+  const typeRank: Record<string, number> = {
+    'repository': 1,
+    'module': 2,
+    'file': 3,
+    'symbol': 4
+  };
+
+  for (const edge of allEdges) {
+    if (!edge.out || !edge.in) continue;
+    const fromId = edge.out.toString();
+    const toId = edge.in.toString();
+    const fromNode = nodeMap.get(fromId);
+    const toNode = nodeMap.get(toId);
+    
+    if (fromNode && toNode) {
+      const fromRank = typeRank[fromNode.type] || 99;
+      const toRank = typeRank[toNode.type] || 99;
+      
+      // If ranks are different, use rank to determine direction
+      // If ranks are same (e.g. module -> module), trust the edge direction (out -> in)
+      if (fromRank < toRank || (fromRank === toRank && fromRank <= 2)) {
+        if (!fromNode.children.some((c: any) => c.id === toNode.id)) {
+          fromNode.children.push(toNode);
+        }
+      } else if (toRank < fromRank) {
+        if (!toNode.children.some((c: any) => c.id === fromNode.id)) {
+          toNode.children.push(fromNode);
+        }
+      }
+    }
+
+  }
+
+  const fullTree = nodeMap.get(rootId);
+  if (!fullTree) throw new Error('Structure not found.');
+
+  promoteModules(fullTree);
+  computeRecursiveStats(fullTree);
+
+  const pruneAndFold = (node: any, currentDepth: number) => {
+    let isAtFocus = focusPath ? (node.path === focusPath || (node.path && node.path.startsWith(focusPath + '/')) || (focusPath.startsWith(node.path + '/'))) : false;
+
+    if (adaptive && currentDepth >= 1 && (node.type === 'module' || node.type === 'package') && node.stats.files > foldThreshold && !isAtFocus) {
+      node.filesSummarized = true;
+      const subDirs = node.children.filter((c: any) => c.type === 'module' || c.type === 'package');
+      const entryFiles = ['index.ts', 'index.js', 'main.go', 'mod.rs', '__init__.py', 'server.ts', 'app.ts'];
+      const files = node.children.filter((c: any) => c.type === 'file');
+      
+      const importantFiles = files.filter((f: any) => entryFiles.includes(f.name) || (f.exportedSymbols && f.exportedSymbols.length > 0))
+        .slice(0, 5);
+      
+      node.children = [...subDirs, ...importantFiles];
+      if (files.length > importantFiles.length) {
+        node.children.push({
+          type: 'summary',
+          name: `... (+${files.length - importantFiles.length} more files)`,
+          children: []
+        });
+      }
+    }
+
+    if (currentDepth >= depth && !isAtFocus) {
+      if (node.type === 'file' && showSymbols) {
+        node.exportedSymbols = node.children
+          .filter((c: any) => c.type === 'symbol' && c.isExported)
+          .map((c: any) => ({ name: c.name, kind: c.kind, type: c.type }));
+      }
+      node.children = [];
+      return;
+    }
+
+    // Filter out symbols if showSymbols is false
+    if (!showSymbols) {
+      node.children = node.children.filter((c: any) => c.type !== 'symbol');
+    }
+
+    for (const child of node.children) {
+      pruneAndFold(child, currentDepth + 1);
+    }
+  };
+
+  let targetTree = fullTree;
+  if (focusPath) {
+    const focusNode = Array.from(nodeMap.values()).find(n => n.path === focusPath);
+    if (focusNode) targetTree = focusNode;
+  }
+
+  pruneAndFold(targetTree, 0);
+
+  const format = args.format ?? (adaptive ? 'tree' : 'json');
+  const verbose = args.verbose === true || args.verbose === 'true';
+
+  if (format === 'tree') {
+    return { content: [{ type: 'text', text: formatTree(targetTree) }] };
+  }
+
+  if (format === 'markdown') {
+    return { content: [{ type: 'text', text: formatMarkdown(targetTree) }] };
+  }
+
+  const prunedTree = pruneMetadata(targetTree, verbose);
+  const response = budget.truncate({ structure: prunedTree });
+  return { content: [{ type: 'text', text: JSON.stringify(response, null, 2) }] };
+}
+
 export function createStructureTools(store: IStore, repoPath: string, budget: TokenBudgetManager) {
   return [
     {
+      name: 'get_file_tree',
+      description: 'Returns a compact, hierarchical file tree of the repository.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          path: { type: 'string', description: 'Focus on a specific directory' },
+          depth: { type: 'number', default: 2, description: 'Depth of the tree' },
+          adaptive: { type: 'boolean', default: true, description: 'Fold dense directories' }
+        }
+      },
+      handler: async (args: any) => {
+        try {
+          return await executeStructureQuery(store, budget, {
+            ...args,
+            showSymbols: false, // Default to compact for file_tree
+            format: 'tree'
+          });
+        } catch (err: any) {
+          return { content: [{ type: 'text', text: err.message }], isError: true };
+        }
+      }
+    },
+    {
       name: 'query_repo_structure',
+
       description: 'Get a hierarchical overview of the repository (Modules -> Files -> Symbols).',
       inputSchema: {
         type: 'object',
@@ -175,187 +366,13 @@ export function createStructureTools(store: IStore, repoPath: string, budget: To
 
 
       handler: async (args: any) => {
-        const depth = args.depth ?? 2;
-        const adaptive = args.adaptive !== false;
-        const focusPath = args.path;
-
-        const repos = await store.query<any>(`SELECT id, name, type, path FROM repository LIMIT 1`);
-        if (repos.length === 0) {
-          return { content: [{ type: 'text', text: 'Repository not initialized. Run `tokenzip init` and `tokenzip parse` first.' }], isError: true };
+        try {
+          return await executeStructureQuery(store, budget, args);
+        } catch (err: any) {
+          return { content: [{ type: 'text', text: err.message }], isError: true };
         }
-        
-        const rootId = repos[0].id.toString();
-        
-        // Fetch stats to determine threshold
-        const statsRes = await store.query<any>('SELECT count() as count FROM file GROUP ALL');
-        const totalFiles = statsRes[0]?.count || 0;
-        const foldThreshold = totalFiles > 1000 ? 50 : 8;
-
-        // Fetch all contains edges
-        const allEdges = await store.query<any[]>(`SELECT * FROM contains`) || [];
-
-        
-        // Collect all unique node IDs involved in the structure
-        const nodeIds = new Set<string>();
-        nodeIds.add(rootId);
-        for (const edge of allEdges) {
-          if (edge.out) nodeIds.add(edge.out.toString());
-          if (edge.in) nodeIds.add(edge.in.toString());
-        }
-
-        // Fetch all nodes
-        const idsAsRecords = Array.from(nodeIds).map(id => {
-          if (id.includes(':')) {
-            const [table, ...rest] = id.split(':');
-            return new RecordId(table, rest.join(':'));
-          }
-          return id;
-        });
-
-        const allNodes = (await store.query<any[]>(`SELECT * FROM $ids`, { ids: idsAsRecords })) || [];
-        
-        // Build the tree in memory
-        const nodeMap = new Map<string, any>();
-        for (const node of allNodes) {
-          if (!node || !node.id) continue;
-          const id = node.id.toString();
-          
-          let name = node.name;
-          if (!name && node.path) {
-            name = node.path.split('/').pop() || node.path;
-          }
-
-          nodeMap.set(id, {
-            id: id,
-            name: name,
-            type: node.type,
-            path: node.path,
-            kind: node.kind,
-            isExported: node.isExported,
-            children: []
-          });
-        }
-
-
-
-        // Build parent-child relationships semantically
-        const typeRank: Record<string, number> = {
-          'repository': 1,
-          'module': 2,
-          'file': 3,
-          'symbol': 4
-        };
-
-        for (const edge of allEdges) {
-          if (!edge.out || !edge.in) continue;
-          const fromId = edge.out.toString();
-          const toId = edge.in.toString();
-          const fromNode = nodeMap.get(fromId);
-          const toNode = nodeMap.get(toId);
-          
-          if (fromNode && toNode) {
-            const fromRank = typeRank[fromNode.type] || 99;
-            const toRank = typeRank[toNode.type] || 99;
-            
-            if (fromRank < toRank) {
-              // Check if toNode is a direct child (depth limit logic)
-              // For now, we'll build the whole tree and prune later if needed, 
-              // or just keep it since budget manager handles truncation.
-              if (!fromNode.children.some((c: any) => c.id === toNode.id)) {
-                fromNode.children.push(toNode);
-              }
-
-            } else if (toRank < fromRank) {
-              if (!toNode.children.some((c: any) => c.id === fromNode.id)) {
-                toNode.children.push(fromNode);
-              }
-            }
-          }
-        }
-
-        const fullTree = nodeMap.get(rootId);
-        if (!fullTree) {
-          return { content: [{ type: 'text', text: 'Structure not found.' }], isError: true };
-        }
-
-        // 1. Promote modules based on index files
-        promoteModules(fullTree);
-
-        // 2. Compute recursive stats
-        computeRecursiveStats(fullTree);
-
-        // 3. Apply adaptive folding and depth pruning
-        const pruneAndFold = (node: any, currentDepth: number) => {
-          // isAtFocus is true ONLY if we are specifically targeting this path or its parents/children
-          let isAtFocus = focusPath ? (node.path === focusPath || (node.path && node.path.startsWith(focusPath + '/')) || (focusPath.startsWith(node.path + '/'))) : false;
-
-          // Adaptive folding for dense directories (if not at focus)
-          if (adaptive && currentDepth >= 1 && (node.type === 'module' || node.type === 'package') && node.stats.files > foldThreshold && !isAtFocus) {
-            node.filesSummarized = true;
-            
-            const subDirs = node.children.filter((c: any) => c.type === 'module' || c.type === 'package');
-            const entryFiles = ['index.ts', 'index.js', 'main.go', 'mod.rs', '__init__.py', 'server.ts', 'app.ts'];
-            const files = node.children.filter((c: any) => c.type === 'file');
-            
-            const importantFiles = files.filter((f: any) => entryFiles.includes(f.name) || (f.exportedSymbols && f.exportedSymbols.length > 0))
-              .slice(0, 5);
-            
-            node.children = [...subDirs, ...importantFiles];
-            if (files.length > importantFiles.length) {
-              node.children.push({
-                type: 'summary',
-                name: `... (+${files.length - importantFiles.length} more files)`,
-                children: []
-              });
-            }
-          }
-
-          // Depth pruning (respect focus path)
-          if (currentDepth >= depth && !isAtFocus) {
-            if (node.type === 'file') {
-              node.exportedSymbols = node.children
-                .filter((c: any) => c.type === 'symbol' && c.isExported)
-                .map((c: any) => ({ name: c.name, kind: c.kind, type: c.type }));
-            }
-            node.children = [];
-            return;
-          }
-
-          for (const child of node.children) {
-            pruneAndFold(child, currentDepth + 1);
-          }
-        };
-
-
-        // If focusPath is provided, we might want to find the node for the focusPath first
-        let targetTree = fullTree;
-        if (focusPath) {
-          const focusNode = Array.from(nodeMap.values()).find(n => n.path === focusPath);
-          if (focusNode) targetTree = focusNode;
-        }
-
-        pruneAndFold(targetTree, 0);
-
-        const format = args.format ?? (adaptive ? 'tree' : 'json');
-        const verbose = args.verbose === true || args.verbose === 'true';
-
-        if (format === 'tree') {
-          const treeText = formatTree(targetTree);
-          return { content: [{ type: 'text', text: treeText }] };
-        }
-
-        if (format === 'markdown') {
-          const mdText = formatMarkdown(targetTree);
-          return { content: [{ type: 'text', text: mdText }] };
-        }
-
-        // Default: JSON
-        const prunedTree = pruneMetadata(targetTree, verbose);
-        const response = budget.truncate({ structure: prunedTree });
-        return {
-          content: [{ type: 'text', text: JSON.stringify(response, null, 2) }],
-        };
       },
+
 
 
     },

@@ -86,31 +86,6 @@ export function createNavigationTools(store: IStore, repoPath: string, budget: T
         };
       }
     },
-    {
-      name: 'get_file_tree',
-      description: 'Returns a compact file tree of the repository.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          depth: { type: 'number', default: 2 }
-        }
-      },
-      handler: async (args: any) => {
-        const { depth = 2 } = args;
-        
-        // This is a simplified version that just lists all files
-        // A real tree would be recursive, but SurrealDB can handle it
-        const files = await store.query('SELECT path, size_bytes, language FROM file LIMIT 1000');
-        
-        const response = budget.truncate({ 
-          fileCount: files.length,
-          files 
-        });
-
-        return {
-          content: [{ type: 'text', text: JSON.stringify(response, null, 2) }],
-        };
-      }
-    }
   ];
 }
+
