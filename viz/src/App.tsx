@@ -43,6 +43,8 @@ const App: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [repoInfo, setRepoInfo] = useState<{ name: string; path: string } | null>(null);
   const [isSearching, setIsSearching] = useState(false);
+  const [isMaximized, setIsMaximized] = useState(false);
+  const [searchTypeFilter, setSearchTypeFilter] = useState<'all' | 'file' | 'symbol'>('all');
   const [filters, setFilters] = useState({
     nodes: { file: true, symbol: true },
     edges: { calls: true, contains: true, imports: true, implements: true, exports: true, references: true }
@@ -401,7 +403,7 @@ const App: React.FC = () => {
           <p>Connecting to Knowledge Graph...</p>
         </div>
       ) : (
-        <>
+        <div className="graph-container">
           <ForceGraph2D
             ref={fgRef}
             graphData={visibleData}
@@ -419,58 +421,25 @@ const App: React.FC = () => {
             linkColor={getLinkColor}
             linkWidth={(link: any) => (selectedNode && (link.source.id === selectedNode.id || link.target.id === selectedNode.id)) ? 2 : 1}
           />
-
           <div className="overlay">
-            <div className="panel sidebar">
+            <div className="panel sidebar glass-morphism">
               <div className="header">
                 <div className="logo-section">
                   <Activity className="logo-icon" size={24} />
                   <div className="logo-text">TokenZip<span>Viz</span></div>
                 </div>
-                {repoInfo && (
-                  <div className="project-info">
-                    <div className="project-name">{repoInfo.name}</div>
-                    <div className="project-path">{repoInfo.path}</div>
-                  </div>
-                )}
                 <div className="status-badge">
                   <div className="status-dot"></div>
                   {dbPort}
                 </div>
               </div>
               
-              <div className="search-container">
-                <div className="search-input-wrapper">
-                  <Search className="search-icon" size={18} />
-                  <input
-                    type="text"
-                    placeholder="Search repository (symbols, files)..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                  />
-                  {isSearching && <div className="search-spinner"></div>}
+              {repoInfo && (
+                <div className="project-info">
+                  <div className="project-name">{repoInfo.name}</div>
+                  <div className="project-path">{repoInfo.path}</div>
                 </div>
-                
-                {searchResults.length > 0 && (
-                  <div className="search-results glass-panel">
-                    {searchResults.map(result => (
-                      <div 
-                        key={result.id} 
-                        className="search-result-item"
-                        onClick={() => handleSelectSearchResult(result)}
-                      >
-                        <div className={`result-icon ${result.type}`}>
-                          {result.type === 'file' ? <FileCode size={14} /> : <Zap size={14} />}
-                        </div>
-                        <div className="result-info">
-                          <div className="result-name">{result.name}</div>
-                          {result.path && <div className="result-path">{result.path}</div>}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+              )}
 
               <div className="legend-section">
                 <h4>GRAPH LEGEND & FILTERS</h4>
@@ -511,7 +480,7 @@ const App: React.FC = () => {
           </div>
 
           {selectedNode && (
-            <div className="details-panel glass-morphism">
+            <div className={`details-panel glass-morphism ${isMaximized ? 'maximized' : ''}`}>
               <div className="details-header">
                 <div className="node-title">
                   {selectedNode.type === 'file' ? <FileCode size={20} /> : <Zap size={20} />}
@@ -520,7 +489,14 @@ const App: React.FC = () => {
                     <span className="node-id">{selectedNode.id}</span>
                   </div>
                 </div>
-                <button className="close-panel" onClick={() => setSelectedNode(null)}>&times;</button>
+                <div className="header-actions">
+                  <button className="icon-btn" onClick={() => setIsMaximized(!isMaximized)}>
+                    <Maximize size={16} />
+                  </button>
+                  <button className="icon-btn close" onClick={() => { setSelectedNode(null); setIsMaximized(false); }}>
+                    &times;
+                  </button>
+                </div>
               </div>
 
               <div className="details-scroll">
@@ -633,7 +609,66 @@ const App: React.FC = () => {
             <button title="Zoom In" onClick={() => fgRef.current.zoom(fgRef.current.zoom() * 1.5)}><ZoomIn size={18}/></button>
             <button title="Zoom Out" onClick={() => fgRef.current.zoom(fgRef.current.zoom() * 0.7)}><ZoomOut size={18}/></button>
           </div>
-        </>
+
+          <div className="global-search-container">
+            <div className={`search-bar-wrapper glass-morphism ${searchResults.length > 0 ? 'has-results' : ''}`}>
+              <Search className="search-icon" size={20} />
+              <input
+                type="text"
+                placeholder="Search symbols, files, relationships..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+              {isSearching ? <div className="search-spinner"></div> : <div className="search-hint">⌘K</div>}
+              
+              {searchTerm && !isSearching && (
+                <button className="clear-search" onClick={() => { setSearchTerm(''); setSearchResults([]); }}>&times;</button>
+              )}
+            </div>
+
+            {searchResults.length > 0 && (
+              <div className="search-results-dropdown glass-morphism">
+                <div className="results-header">
+                  <div className="results-count">{searchResults.length} RESULTS FOUND</div>
+                  <div className="search-filters">
+                    <button 
+                      className={`filter-pill ${searchTypeFilter === 'all' ? 'active' : ''}`}
+                      onClick={() => setSearchTypeFilter('all')}
+                    >All</button>
+                    <button 
+                      className={`filter-pill ${searchTypeFilter === 'file' ? 'active' : ''}`}
+                      onClick={() => setSearchTypeFilter('file')}
+                    >Files</button>
+                    <button 
+                      className={`filter-pill ${searchTypeFilter === 'symbol' ? 'active' : ''}`}
+                      onClick={() => setSearchTypeFilter('symbol')}
+                    >Symbols</button>
+                  </div>
+                </div>
+                <div className="results-list">
+                  {searchResults
+                    .filter(r => searchTypeFilter === 'all' || r.type === searchTypeFilter)
+                    .map(result => (
+                      <div 
+                        key={result.id} 
+                        className="search-result-row"
+                        onClick={() => handleSelectSearchResult(result)}
+                      >
+                        <div className={`result-type-icon ${result.type}`}>
+                          {result.type === 'file' ? <FileCode size={16} /> : <Zap size={16} />}
+                        </div>
+                        <div className="result-content">
+                          <div className="result-primary">{result.name}</div>
+                          <div className="result-secondary">{result.path || result.id}</div>
+                        </div>
+                        <ChevronRight className="arrow-icon" size={14} />
+                      </div>
+                    ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );
