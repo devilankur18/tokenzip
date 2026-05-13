@@ -1,9 +1,9 @@
 <div align="center">
 
-# 🗜️ TokenZip v2
+# 🗜️ TokenZip
 
-**Transform any codebase into a queryable knowledge graph.**  
-Search symbols, trace call stacks, expose your repo to AI copilots — all from the terminal.
+**The Semantic Compression Layer for AI Agents.**  
+Transform any codebase into a queryable knowledge graph and stop wasting tokens on implementation details.
 
 [![npm version](https://img.shields.io/npm/v/tokenzip.svg)](https://www.npmjs.com/package/tokenzip)
 [![Node.js >= 18](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg)](https://nodejs.org)
@@ -13,302 +13,163 @@ Search symbols, trace call stacks, expose your repo to AI copilots — all from 
 
 ---
 
-## What is TokenZip?
+## 💡 The Idea
 
-TokenZip builds a **relational graph database** of your entire codebase — from files → modules → symbols → call edges — stored locally in `.tokenzip/db`. You can then:
+AI agents (Claude, Cursor, Copilot) are context-starved. Feeding them entire source files is like giving someone a whole book when they only need the table of contents and a few specific chapters.
 
-- **Search** symbols by name and see their callers, callees, and git history
-- **Expose** the graph as an **MCP server** so AI copilots (Claude, Copilot, Cursor) can query your code structure
-- **Keep it fresh** by re-running `parse` after changes
-
-```
-$ tokenzip search createMcpServer
-
-SYMBOL: createMcpServer
-KIND: function
-LOC: src/mcp/server.ts:8-38
-SIG: async function createMcpServer(store: IStore, repoPath: string) {
-CALL_STACK_IN (Callers):
-  - None
-CALL_STACK_OUT (Internal Dependencies):
-  - registerTools [src/mcp/tools/registry.ts]
-DOCS_WORKFLOWS:
-  - None
-GIT_HISTORY:
-  - fe0b20e3 initial commit (Ankur Agarwal)
----
-```
+**TokenZip** transforms your codebase into a **Relational Knowledge Graph**. It indexes symbols, relationships, and call stacks, allowing AI agents to "see" your code's structure and APIs without drowning in redundant implementation logic.
 
 ---
 
-## Install
+## 🚀 The Gain: `file_read` vs `smart_file_read`
 
-### Global install (recommended)
+Most AI tools rely on a standard `file_read` tool that dumps the raw text of a file into the context window. **TokenZip replaces this with `smart_file_read`**, leveraging **Skeletonization** to prune code context intelligently.
 
+| Tool | Approach | Context Footprint | Cost/Latency |
+| :--- | :--- | :--- | :--- |
+| `file_read` | Raw Text | 100% (Full file) | 🔴 High / Overflows |
+| **`smart_file_read`** | **Semantic Skeleton** | **10% - 30%** | **🟢 Low / Efficient** |
+
+### What is Skeletonization?
+Instead of reading the whole file, TokenZip generates a **Skeleton Projection**:
+- **Keeps**: Imports, Exports, Class definitions, Function signatures, and Type declarations.
+- **Hides**: Function/Method bodies (`/* ... implementation hidden ... */`).
+- **Benefit**: The AI understands exactly **how to use** your code without wasting tokens on **how it works** internally.
+
+#### 💡 Scenario: Building a Feature across 5 Files
+Imagine you are fixing a bug or adding a feature that touches **5 source files** (~1,400 tokens each).
+
+| Metric | Standard `file_read` | TokenZip `smart_file_read` |
+| :--- | :--- | :--- |
+| **Initial Context (Turn 1)** | ~15,000 tokens | **~3,000 tokens** |
+| **Turn 5 (Context Bloat)** | 🔴 **~100,000 tokens** | 🟢 **~15,000 tokens** |
+| **Total 10-Iteration Cost** | 🔴 **~1,100,000 tokens** | 🟢 **~165,000 tokens** |
+| **Token Savings** | 0% (Baseline) | **85% SAVED 🚀** |
+
+**The "Token Tax" Trap**: 
+Standard agents send the *entire* content of every file they read in every turn. This "Context Bloat" causes a simple session to explode from 15K to 100K+ tokens in just a few turns, quickly hitting model limits and making the agent "hallucinate" as it loses its train of thought.
+
+**The TokenZip Edge**: 
+By reading **Skeletons** during navigation and only fetching full implementations when absolutely necessary, TokenZip reduces the "cumulative tax" by **~85%**. This allows you to perform deep, multi-file refactors for the price of a single standard chat.
+
+---
+
+## 📊 Case Study: OpenClaw (14K+ Files)
+
+[OpenClaw](https://github.com/Clawdi-AI/openclaw) is a massive project heavy-coded with AI. In a benchmark comparing raw context vs. TokenZip optimization, the results were staggering:
+
+| Metric | Standard `file_read` | TokenZip `smart_file_read` |
+| :--- | :--- | :--- |
+| **Total Context Footprint** | 11.3 Million Tokens | 2.9 Million Tokens |
+| **Token Savings** | 0% | **73% 🚀** |
+| **Input Cost (Per Turn)** | 🔴 11.3M Tokens | 🟢 2.9M Tokens |
+| **5-Turn Cumulative** | 🔴 56.5M Tokens | 🟢 14.5M Tokens |
+| **Direct Savings (5 Turns)** | **--** | **42M Tokens (~$120+ Saved)** |
+| **Context Headroom** | ❌ Zero (Truncated) | ✅ Fits 3.8x more context |
+
+*By reducing the "per-file" token tax, TokenZip allows your AI agents to maintain massive repositories in their active memory without hitting token limits or burning through API budgets.*
+
+*Check out the [detailed benchmark report](https://gist.github.com/devilankur18/e21baec76d348dd2f1cd3339c3a1d319) for file-level metrics.*
+
+---
+
+## 🛠️ Key Features
+
+- **Relational Graph Database**: Powered by **SurrealDB**, storing files → modules → symbols → call edges.
+- **Deep Code Analysis**: Uses **Tree-sitter** to extract complex relationships (`calls`, `imports`, `inherits`, `implements`).
+- **AI-Ready (MCP)**: Exposes the graph as an **MCP server** for deep context in Claude Desktop, Cursor, and more.
+- **Incremental Parsing**: Only indexes changed files using content hashing—perfect for large repos.
+- **Git Enrichment**: Maps symbol history to git commits for better context.
+
+---
+
+## 🚀 Vision: The Agentic Future
+
+TokenZip isn't just a database; it is the **Cognitive Infrastructure** that allows AI to transition from a reactive "chatbot" to an autonomous **Digital Engineer**.
+
+- **Query vs. Read**: Replaces expensive 50k-token "context dumps" with 500-token **Structured Queries**. Agents stop "reading" files to find dependencies and start "querying" the graph—drastically reducing hallucinations and costs.
+- **Autonomous Multi-Hop Reasoning**: Enables **Recursive Impact Analysis**. An agent can trace who calls a function across the entire repository, allowing for reliable, end-to-end refactoring without breaking the build.
+- **Semantic Grounding**: Acts as the project's **Ground Truth**. By moving from creative token prediction to **Structural Assembly**, the agent verifies every symbol and import before writing a single line of code.
+- **Proactive Context Fetching**: The agent no longer waits for you to provide context; it proactively fetches its own blueprints from the Memory Mesh, maintaining a perfect mental model of the entire codebase.
+- **Consistency & Intuition**: By consulting the graph's existing patterns, the agent develops an "intuition" for your specific project style, ensuring that new code mimics existing middleware, error handling, and standards perfectly.
+
+---
+
+## ⚡ Quick Start
+
+### 1. Install
 ```bash
 npm install -g tokenzip
 ```
 
-You can then run `tokenzip` anywhere.
-
-### Local install (per project)
-
+### 2. Initialize & Parse
 ```bash
-npm install --save-dev tokenzip
-npx tokenzip init
-```
+# Go to your repository
+cd /path/to/repo
 
----
-
-## Quick Start
-
-```bash
-# 1. Go to any repo
-cd /path/to/your-project
-
-# 2. Initialize TokenZip (creates .tokenzip/ directory)
+# Initialize metadata (.tokenzip/)
 tokenzip init
 
-# 3. Index the codebase (builds the graph)
+# Build the knowledge graph
 tokenzip parse
-
-# 4. Search for any symbol
-tokenzip search "useEffect"
-tokenzip search "handleAuth"
-tokenzip search "db" --l## Features
-
-- **Relational Graph Storage**: Built on **SurrealDB** (embedded), indexing files, modules, symbols, and relationships.
-- **Deep Code Analysis**: Uses **Tree-sitter** to extract not just symbols, but complex relationships like `calls`, `imports`, `inherits`, and `implements`.
-- **Interactive Indexing**: Real-time progress indicators and clear phase logging (Scanning → Indexing → Git → Resolution).
-- **Smart Scoping**: Automatically respects `.gitignore` rules and provides robust error handling for system or restricted directories.
-- **Flexible CLI**: Persistent configuration via `TOKENZIP_CWD` environment variable and global `--cwd` support.
-- **AI-Ready (MCP)**: Exposes everything as an **MCP server** for deep context in Claude, Cursor, and other AI copilots.
-
----
-
-## Install
-
-```bash
-npm install -g tokenzip
 ```
 
----
-
-## Configuration
-
-TokenZip uses a global `--cwd` option to determine the repository root. You can set this once via an environment variable to avoid repeating it:
-
-```bash
-# Set it in your .zshrc or .bashrc
-export TOKENZIP_CWD=/path/to/your/project
-
-# Now you can run commands from anywhere
-tokenzip parse
-tokenzip search "Indexer"
-```
-
----
-
-## Commands
-
-### `tokenzip init`
-
-Initialize TokenZip in the target directory. Creates the `.tokenzip/` metadata folder.
-
-```bash
-tokenzip init [--cwd <dir>]
-```
-
----
-
-### `tokenzip parse`
-
-Index the codebase and build the knowledge graph.
-
-- **Interactive**: Shows real-time parsing progress and statistics.
-- **Incremental**: Only parses changed files using content hashing.
-- **Scale-Ready**: Respects `.gitignore` and handles restricted directories gracefully.
-
-```bash
-tokenzip parse [--full]
-```
-
-**Output:**
-```
-📂 Working Directory: /Users/ankur/dev/my-project
-📦 Initializing Repository...
-🔍 Scanning files... found 1240 files.
-
-🚀 Indexing 1240 files...
-   [45%] Processing: src/components/Header.tsx...
-✅ Indexing complete! Parsed 842 files, skipped 398 in 12.4s.
-
-📜 Extracting Git history... done.
-🔄 Resolving 452 edges... done.
-
-✨ Codebase Knowledge Graph is ready!
-```
-
----
-
-### `tokenzip search <query>`
-...
-```bash
-tokenzip search useEffect
-```
-
----
-
-### `tokenzip smart-read <file_path>`
-
-Read semantic projections of a file instead of raw text. This saves up to 90% of tokens when feeding code to AI models.
-
-- **`interface_only`**: Shows only function signatures, class members, and types.
-- **`skeleton`**: Shows the full file structure but replaces all function/method bodies with `/* ... implementation hidden ... */`.
-- **`dependency_only`**: Extract imports, exports, and a summary call graph.
-- **`implementation_of`**: Focuses on the implementation of a specific symbol (requires `--symbol`).
-
-```bash
-# Get the interface of a file
-tokenzip smart-read src/index.ts --mode interface_only
-
-# See how a specific function is implemented
-tokenzip smart-read lib/application.js --mode implementation_of --symbol handle
-```
-
-
----
-
-### 📊 Benchmark: 73% Token Savings
-
-On a codebase with **11.3M tokens**, TokenZip's `smart-read` reduced the AI context footprint to just **2.9M tokens** — a **73% reduction** in overhead.  
-Check out the [full benchmark report](https://gist.github.com/devilankur18/e21baec76d348dd2f1cd3339c3a1d319) for detailed file-level and directory-specific efficiency metrics.
-
-
-### `tokenzip serve`
-
-Start the **MCP (Model Context Protocol) server**. Exposes your code structure to AI copilots.
-
+### 3. Expose to AI
+Start the MCP server to let your AI agents use `smart_file_read`, `query_symbol`, and `find_references`.
 ```bash
 tokenzip serve
 ```
 
-**Available Tools:**
-| Tool | Description |
-|------|-------------|
-| `get_codebase_stats` | High-level overview of the graph density |
-| `query_repo_structure` | Hierarchical view of modules and files |
-| `find_references` | Multi-relationship search (calls, references, inherits, implements) |
-| `query_symbol` | Get definition, signature, and context |
-| `smart_file_read` | Get semantic projections (signatures, skeleton, logic) |
-
 ---
 
-## How It Works
+## 📖 CLI Usage
 
-TokenZip transforms source code into a queryable graph:
-
-1. **Scan**: Identifies files, respecting `.gitignore`.
-2. **Extract**: Parses with Tree-sitter to find symbols and local relationships.
-3. **Link**: Performs global edge resolution to connect calls across files.
-4. **Enrich**: Maps Git history and inheritance hierarchies.
-5. **Serve**: Provides a standard MCP interface for AI tools.
-
----
-
-## Supported Languages
-
-| Language | Status | Features |
-|----------|--------|----------|
-| **TypeScript/JSX** | ✅ Full | Classes, Interfaces, Call-tracking, Inheritance |
-| **JavaScript** | ✅ Full | Symbol extraction, Imports/Exports |
-| **Python/Go/Rust** | 🔜 Planned | - |
-
----
-
-## Project Structure
-
-```
-src/
-├── cli/                 # Command routing and CWD resolution
-├── engine/              # Indexer logic & .gitignore handling
-├── extractor/           
-│   ├── code/           # Language-specific Tree-sitter extractors
-│   └── git.ts          # Git history enrichment
-├── mcp/                 # MCP Server & Tool definitions
-├── storage/             # SurrealDB schema & store implementation
-└── utils/               # Hashing and path utilities
-```
-
----
-
-## License
-
-MIT © Ankur Agarwal
-ence tools
-│   └── storage/
-│       └── surreal/
-│           ├── migrations.ts   # Schema definitions
-│           └── store.ts        # SurrealDB CRUD + query layer
-├── db/                 # SurrealDB data (gitignored)
-├── package.json
-└── tsup.config.ts
-```
-
----
-
-## Supported Languages
-
-| Language | Status |
-|----------|--------|
-| TypeScript | ✅ Full |
-| JavaScript | ✅ Full (via TS grammar) |
-| Python | 🔜 Planned |
-| Go | 🔜 Planned |
-| Rust | 🔜 Planned |
-
----
-
-## Adding a New Language Extractor
-
-1. Create `src/extractor/code/<language>.ts` extending `BaseExtractor`
-2. Implement `extract(ctx)` returning `{ symbols, edges, parseErrors }`
-3. Register it in `src/extractor/registry.ts`
-
----
-
-## Contributing
-
-## Contributing
-
-To test your changes locally using the `tokenzip` command:
-
-1. **Build the project**:
-   ```bash
-   npm run build
-   ```
-
-2. **Link the package** (one-time setup):
-   ```bash
-   npm link
-   ```
-   *Note: This makes the `tokenzip` command available globally, pointing to your local source.*
-
-3. **Run commands directly**:
-   ```bash
-   tokenzip init
-   tokenzip parse
-   tokenzip search "Indexer"
-   ```
-
-**Alternative (no link required):**
-If you don't want to link globally, you can use `npx .`:
+### `tokenzip search <query>`
+Find any symbol, its signature, and its relationships across the codebase.
 ```bash
-npx . parse
+tokenzip search createMcpServer
+```
+
+### `tokenzip smart-read <file_path>`
+Test the compression logic directly from your terminal.
+```bash
+# Get the skeleton (no function bodies)
+tokenzip smart-read src/engine/indexer.ts --mode skeleton
+
+# Get only signatures and types
+tokenzip smart-read src/engine/indexer.ts --mode interface_only
+```
+
+### `tokenzip report`
+Generate a token efficiency audit for your own repository.
+```bash
+tokenzip report --output audit.md
 ```
 
 ---
 
-## License
+## ⚙️ Configuration
 
-MIT © Ankur Agarwal
+Set the `TOKENZIP_CWD` environment variable in your `.zshrc` or `.bashrc` to run commands from anywhere:
+```bash
+export TOKENZIP_CWD=/path/to/your/project
+```
+
+---
+
+## 🏗️ Project Status & Roadmap
+
+> [!IMPORTANT]
+> TokenZip v2 is currently **Experimental**. We are actively refining the edge resolution logic and adding more language support.
+
+- [x] TypeScript / JavaScript support
+- [ ] Python Extractor
+- [ ] Go / Rust Support
+- [ ] Visual Graph Explorer (Web UI)
+- [ ] Deeper Call Graph Resolution
+
+---
+
+## 📄 License
+
+MIT © [Ankur Agarwal](https://github.com/devilankur18)
