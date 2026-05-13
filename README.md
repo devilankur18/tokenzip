@@ -168,6 +168,34 @@ tokenzip report --output audit.md
 
 ---
 
+## 🤖 MCP Server (Agentic Context)
+
+TokenZip is a first-class MCP server. It gives AI agents (like Claude Desktop) deep repository awareness.
+
+### 1. Start the server
+```bash
+tokenzip serve
+```
+
+### 2. Connect to Claude
+Add this to your `claude_desktop_config.json`:
+```json
+{
+  "mcpServers": {
+    "tokenzip": {
+      "command": "tokenzip",
+      "args": ["serve", "--cwd", "/path/to/your/repo"]
+    }
+  }
+}
+```
+
+> [!TIP]
+> If you are running TokenZip from source, run `npm link` in the root of this project to make the `tokenzip` command available globally.
+
+For more details, see the [MCP Guide](docs/mcp_guide.md).
+
+## 🛠️ Commands
 ## ⚙️ Configuration
 
 Set the `TOKENZIP_CWD` environment variable in your `.zshrc` or `.bashrc` to run commands from anywhere:

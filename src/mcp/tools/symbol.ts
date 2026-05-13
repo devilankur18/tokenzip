@@ -47,18 +47,9 @@ export function createSymbolTools(store: IStore, repoPath: string, budget: Token
         // Find symbols that have ANY of these relations to our targets
         const callers = await store.query(`
           SELECT *, 
-                 (SELECT path FROM file WHERE id = $parent.fileId)[0].path as filePath,
-                 (SELECT type FROM ANY WHERE out IN $targets AND in = $parent.id)[0].type as relationType
+                 (SELECT path FROM file WHERE id = $parent.fileId)[0].path as filePath
           FROM symbol 
-          WHERE id IN (
-            SELECT in FROM calls WHERE out IN $targets
-            UNION
-            SELECT in FROM inherits WHERE out IN $targets
-            UNION
-            SELECT in FROM implements WHERE out IN $targets
-            UNION
-            SELECT in FROM references WHERE out IN $targets
-          )
+          WHERE id IN (SELECT VALUE in FROM calls, inherits, implements, references WHERE out IN $targets)
         `, { targets: targetIds });
         
         const response = budget.truncate({ 

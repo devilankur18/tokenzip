@@ -17,21 +17,17 @@ export function createStructureTools(store: IStore, repoPath: string, budget: To
       handler: async (args: any) => {
         const depth = args.depth ?? 2;
         
-        // Find root repository
-        const repos = await store.query('SELECT id, name FROM repository LIMIT 1');
-        if (repos.length === 0) {
-          return { content: [{ type: 'text', text: 'Repository not initialized. Run `tokenzip init` first.' }], isError: true };
-        }
-        
-        const rootId = repos[0].id;
-        
-        // Fetch hierarchical structure using contains relations
+        // Find root repository and its children (modules/files)
         const structure = await store.query(`
           SELECT 
             id, name, type, path,
-            (SELECT id, name, type, path FROM ->contains LIMIT 50) as children
-          FROM type::record($rootId)
-        `, { rootId });
+            (SELECT id, name, type, path FROM ->contains->ANY) as children
+          FROM repository LIMIT 1
+        `);
+        
+        if (structure.length === 0) {
+          return { content: [{ type: 'text', text: 'Repository not initialized. Run `tokenzip init` and `tokenzip parse` first.' }], isError: true };
+        }
         
         const response = budget.truncate({ structure: structure[0] });
         return {

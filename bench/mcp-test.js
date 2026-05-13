@@ -19,7 +19,7 @@ import { parseArgs } from 'util';
 import { existsSync } from 'fs';
 
 const { values: args } = parseArgs({
-  options: { cwd: { type: 'string', default: '/tmp/express-bench' } }
+  options: { cwd: { type: 'string', default: process.cwd() } }
 });
 
 const BENCH_REPO = resolve(args.cwd);
@@ -224,10 +224,24 @@ async function runTests() {
   );
 
   await test(
-    'get_file_symbols: lib/router/index.js',
-    'List all symbols defined in the router module',
+    'get_file_symbols: src/index.ts',
+    'List all symbols defined in the main entry point',
     'get_file_symbols',
-    { file_path: 'lib/router/index.js' }
+    { file_path: 'src/index.ts' }
+  );
+
+  await test(
+    'get_codebase_stats',
+    'Get high-level repository stats',
+    'get_codebase_stats',
+    {}
+  );
+
+  await test(
+    'smart_file_read: src/index.ts (skeleton)',
+    'Read semantic projection of the entry point',
+    'smart_file_read',
+    { path: 'src/index.ts', mode: 'skeleton' }
   );
 
   // ─── summary ──────────────────────────────────────────────────────────────
