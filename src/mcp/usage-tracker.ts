@@ -12,11 +12,12 @@ export class UsageTracker {
 
     if (filePath) {
       const absPath = path.resolve(this.repoPath, filePath);
-      if (fs.existsSync(absPath)) {
+      if (fs.existsSync(absPath) && fs.statSync(absPath).isFile()) {
         const fullContent = fs.readFileSync(absPath, 'utf-8');
         naiveTokens = this.budget.estimate(fullContent);
       }
     }
+
 
     const savingsPercent = naiveTokens > 0 
       ? Math.max(0, ((naiveTokens - smartTokens) / naiveTokens) * 100) 
