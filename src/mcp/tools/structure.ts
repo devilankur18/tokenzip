@@ -16,13 +16,17 @@ export function createStructureTools(store: IStore, repoPath: string, budget: To
       },
       handler: async (args: any) => {
         const depth = args.depth ?? 2;
-        
-        // Find root repository and its children (modules/files)
+
+        // Helper to build recursive selection for SurrealDB
+        const buildRecursiveQuery = (d: number): string => {
+          const fields = 'id, name, type, path, kind';
+          if (d <= 0) return fields;
+          return `${fields}, (SELECT ${buildRecursiveQuery(d - 1)} FROM ->contains->ANY) AS children`;
+        };
+
+        const selection = buildRecursiveQuery(depth);
         const structure = await store.query(`
-          SELECT 
-            id, name, type, path,
-            (SELECT id, name, type, path FROM ->contains->ANY) as children
-          FROM repository LIMIT 1
+          SELECT ${selection} FROM repository LIMIT 1
         `);
         
         if (structure.length === 0) {

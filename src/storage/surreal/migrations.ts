@@ -140,6 +140,16 @@ DEFINE INDEX OVERWRITE idx_commit_hash ON commit FIELDS hash UNIQUE;
 DEFINE INDEX OVERWRITE idx_dep_name ON dependency FIELDS name, module_id;
 
 // --- FULL TEXT SEARCH INDEXES ---
-DEFINE INDEX OVERWRITE idx_symbol_search ON symbol FIELDS name, docstring SEARCH ANALYZER ascii BM25 HIGHLIGHTS;
-DEFINE INDEX OVERWRITE idx_file_search ON file FIELDS path SEARCH ANALYZER ascii BM25;
+// DEFINE INDEX OVERWRITE idx_symbol_search ON symbol FIELDS name, docstring TYPE SEARCH ANALYZER ascii BM25 HIGHLIGHTS;
+// DEFINE INDEX OVERWRITE idx_file_search ON file FIELDS path TYPE SEARCH ANALYZER ascii BM25;
+
+// --- ANALYTICS ---
+
+DEFINE TABLE OVERWRITE usage_log SCHEMAFULL;
+DEFINE FIELD OVERWRITE timestamp ON usage_log TYPE datetime DEFAULT time::now();
+DEFINE FIELD OVERWRITE tool_name ON usage_log TYPE string;
+DEFINE FIELD OVERWRITE file_path ON usage_log TYPE option<string>;
+DEFINE FIELD OVERWRITE smart_tokens ON usage_log TYPE int;
+DEFINE FIELD OVERWRITE naive_tokens ON usage_log TYPE int;
+DEFINE FIELD OVERWRITE savings_percent ON usage_log TYPE float;
 `;

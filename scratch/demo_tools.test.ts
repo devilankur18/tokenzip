@@ -18,7 +18,8 @@ test('demo new tools', { timeout: 30000 }, async () => {
     { name: 'fuzzy_find_symbol', args: { query: 'Smart' } },
     { name: 'search_codebase', args: { query: 'TokenBudgetManager' } },
     { name: 'find_implementations', args: { symbol_name: 'IStore' } },
-    { name: 'get_call_hierarchy', args: { symbol_name: 'executeStrategy' } }
+    { name: 'get_call_hierarchy', args: { symbol_name: 'executeStrategy' } },
+    { name: 'smart_file_read', args: { path: 'src/mcp/tools/smart-file-read.ts', mode: 'skeleton' } }
   ];
   
   for (const call of testCalls) {
