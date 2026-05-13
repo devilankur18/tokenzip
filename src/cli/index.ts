@@ -13,6 +13,7 @@ import { reportCommand } from './commands/report.js';
 import { doctorCommand } from './commands/doctor.js';
 import { debugCommand } from './commands/debug.js';
 import { statsCommand } from './commands/stats.js';
+import { visualizeCommand } from './commands/visualize.js';
 
 const program = new Command();
 
@@ -47,6 +48,7 @@ program.addCommand(doctorCommand);
 program.addCommand(reportCommand);
 program.addCommand(debugCommand);
 program.addCommand(statsCommand);
+program.addCommand(visualizeCommand);
 
 program.parseAsync(process.argv).catch(err => {
   console.error(err);

@@ -13,10 +13,12 @@ export class SurrealStore implements IStore {
   private dbPath: string;
   private serverProcess: ChildProcess | null = null;
   private socketPath: string | null = null;
+  private forcedPort?: number;
 
-  constructor(dbPath: string) {
+  constructor(dbPath: string, forcedPort?: number) {
     this.dbPath = dbPath;
     this.db = new Surreal();
+    this.forcedPort = forcedPort;
   }
 
   async initialize(): Promise<void> {
@@ -73,7 +75,7 @@ export class SurrealStore implements IStore {
 
     // Find a deterministic port based on the repo path
     const repoPath = path.resolve(parent, '..');
-    const port = this.getDeterministicPort(repoPath);
+    const port = this.forcedPort || this.getDeterministicPort(repoPath);
 
     // console.log(`Starting background SurrealDB server on port ${port} for ${this.dbPath}...`);
     await this.startBackgroundServer(port);
@@ -109,16 +111,24 @@ export class SurrealStore implements IStore {
   private async startBackgroundServer(port: number): Promise<void> {
     const dbDir = path.resolve(this.dbPath);
     
+    const logFile = path.resolve(this.dbPath, 'surreal.log');
+    if (!fs.existsSync(this.dbPath)) {
+      fs.mkdirSync(this.dbPath, { recursive: true });
+    }
+    const logStream = fs.openSync(logFile, 'a');
+
     this.serverProcess = spawn('surreal', [
       'start',
       '--user', 'root',
       '--pass', 'root',
       '--bind', `127.0.0.1:${port}`,
+      '--allow-all',
       '--default-namespace', 'tokenzip',
       '--default-database', 'graph',
       `surrealkv:${dbDir}`
     ], {
-      detached: false
+      detached: false,
+      stdio: ['ignore', logStream, logStream]
     });
 
     // Wait for the server to be ready (poll the port)

@@ -225,6 +225,12 @@ export TOKENZIP_CWD=/path/to/your/project
 
 ---
 
+## 🛠️ Development & Testing
+
+For instructions on how to run tests, contribute to the engine, or benchmark performance, please see [TESTING.md](TESTING.md).
+
+---
+
 ## 📄 License
 
 MIT © [Ankur Agarwal](https://github.com/devilankur18)

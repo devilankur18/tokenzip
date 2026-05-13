@@ -47,9 +47,9 @@ describe('MCP Integration Tests (Express.js Bench)', () => {
     expect(data).toMatchSnapshot();
   });
 
-  it('query_symbol "express"', async () => {
+  it('query_symbol "createApplication"', async () => {
     const result = await runTool('query_symbol', { 
-      symbol_name: 'express' 
+      symbol_name: 'createApplication' 
     });
     const data = JSON.parse(result.content[0].text);
     
@@ -83,8 +83,8 @@ describe('MCP Integration Tests (Express.js Bench)', () => {
   });
 
   it('fetch_symbol_metadata for known symbol', async () => {
-    // First find the symbol ID for 'express'
-    const symRes = await runTool('query_symbol', { symbol_name: 'express' });
+    // First find the symbol ID for 'createApplication'
+    const symRes = await runTool('query_symbol', { symbol_name: 'createApplication' });
     const symId = JSON.parse(symRes.content[0].text).symbols[0].id;
     
     const result = await runTool('fetch_symbol_metadata', { 
@@ -93,7 +93,64 @@ describe('MCP Integration Tests (Express.js Bench)', () => {
     const data = JSON.parse(result.content[0].text);
     
     expect(data.symbols).toHaveLength(1);
-    expect(data.symbols[0].name).toBe('express');
+    expect(data.symbols[0].name).toBe('createApplication');
     expect(data).toMatchSnapshot();
+  });
+
+  it('search_codebase for "createApplication"', async () => {
+    const result = await runTool('search_codebase', { 
+      query: 'createApplication' 
+    });
+    const data = JSON.parse(result.content[0].text);
+    
+    expect(data.matches).toBeDefined();
+    expect(data.matches.length).toBeGreaterThan(0);
+    expect(data).toMatchSnapshot();
+  });
+
+  it('fuzzy_find_symbol "createApp"', async () => {
+    const result = await runTool('fuzzy_find_symbol', { 
+      query: 'createApp' 
+    });
+    const data = JSON.parse(result.content[0].text);
+    
+    expect(data.candidates).toBeDefined();
+    expect(data.candidates.some((s: any) => s.name === 'createApplication')).toBe(true);
+  });
+
+  it('find_references for "createApplication"', async () => {
+    const result = await runTool('find_references', { 
+      symbol_name: 'createApplication'
+    });
+    const data = JSON.parse(result.content[0].text);
+    
+    expect(data.references).toBeDefined();
+    expect(data).toMatchSnapshot();
+  }, 60000);
+
+  it('get_dependencies for lib/express.js', async () => {
+    const result = await runTool('get_dependencies', { 
+      file_path: 'lib/express.js' 
+    });
+    const data = JSON.parse(result.content[0].text);
+    
+    expect(data.dependencies).toBeDefined();
+    // In Express, express.js requires many things. We check if at least some are found.
+    expect(data.dependencies.length).toBeGreaterThan(0);
+    expect(data).toMatchSnapshot();
+  });
+
+  it('get_token_savings (detailed)', async () => {
+    // Run a tool first to log some usage
+    await runTool('smart_file_read', { path: 'lib/express.js' });
+
+    const result = await runTool('get_token_savings', { 
+      format: 'detailed' 
+    });
+    const data = JSON.parse(result.content[0].text);
+    
+    expect(data.callCount).toBeDefined();
+    expect(data.totalSmart).toBeDefined();
+    expect(data.totalSaved).toBeDefined();
   });
 });

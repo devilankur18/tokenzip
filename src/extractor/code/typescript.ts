@@ -315,6 +315,30 @@ export class TypeScriptExtractor extends BaseExtractor {
         const fnName = fnNode?.text || '';
         const args = node.childForFieldName('arguments');
         
+        // Handle require() for CommonJS
+        if (fnName === 'require' && args) {
+          const firstArg = args.namedChild(0);
+          if (firstArg) {
+            // In tree-sitter-typescript, string literals might be wrapped or be direct string nodes
+            let source = '';
+            if (firstArg.type === 'string') {
+              source = firstArg.text.replace(/['"]/g, '');
+            } else if (firstArg.type === 'string_fragment') {
+              source = firstArg.text;
+            }
+            
+            if (source) {
+              edges.push({
+                type: 'imports',
+                from: fileId,
+                to: `unresolved:${source}`,
+                metadata: { source, isRequire: true },
+                isResolved: false
+              });
+            }
+          }
+        }
+
         if (args) {
           for (let i = 0; i < args.namedChildCount; i++) {
             const arg = args.namedChild(i);

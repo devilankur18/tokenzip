@@ -346,6 +346,7 @@ export class Indexer {
       path.resolve(selfDir, 'engine/worker.js'),        // Nested (e.g. in dist/)
       path.resolve(selfDir, '../engine/worker.js'),     // Parent then nested (e.g. in dist/cli/)
       path.resolve(selfDir, '../worker.js'),            // Parent (e.g. in dist/cli/)
+      path.resolve(selfDir, '../../dist/engine/worker.js'), // From source running in vitest
     ];
     const workerScript = workerCandidates.find(p => fs.existsSync(p));
 

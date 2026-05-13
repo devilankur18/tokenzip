@@ -46,6 +46,33 @@ export function createSymbolTools(store: IStore, repoPath: string, budget: Token
       },
     },
     {
+      name: 'get_dependencies',
+      description: 'Get the import dependencies for a specific file.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          file_path: { type: 'string', description: 'Relative path to the file' }
+        },
+        required: ['file_path'],
+      },
+      handler: async (args: any) => {
+        const fileRes = await store.query<any>('SELECT id FROM file WHERE path = $path LIMIT 1', { path: args.file_path });
+        if (fileRes.length === 0) {
+          return { content: [{ type: 'text', text: `File not found: ${args.file_path}` }], isError: true };
+        }
+        
+        const fileId = fileRes[0].id;
+        // Find all modules/files imported by this file
+        const imports = await store.query('SELECT out as target FROM imports WHERE in = $fileId FETCH target', { fileId });
+        const dependencies = imports.map((i: any) => i.target);
+        
+        const response = budget.truncate({ file: args.file_path, dependencies });
+        return {
+          content: [{ type: 'text', text: JSON.stringify(response, null, 2) }],
+        };
+      },
+    },
+    {
       name: 'find_references',
       description: 'Find all symbols that call, reference, extend, or implement a specific symbol.',
       inputSchema: {
@@ -65,12 +92,20 @@ export function createSymbolTools(store: IStore, repoPath: string, budget: Token
         const targetIds = targets.map(t => t.id);
         
         // Find symbols that have ANY of these relations to our targets
+        const [r1, r2, r3, r4] = await Promise.all([
+          store.query<any[]>('SELECT VALUE in FROM calls WHERE out IN $targets', { targets: targetIds }),
+          store.query<any[]>('SELECT VALUE in FROM inherits WHERE out IN $targets', { targets: targetIds }),
+          store.query<any[]>('SELECT VALUE in FROM implements WHERE out IN $targets', { targets: targetIds }),
+          store.query<any[]>('SELECT VALUE in FROM references WHERE out IN $targets', { targets: targetIds })
+        ]);
+        
+        const allIds = Array.from(new Set([...r1, ...r2, ...r3, ...r4]));
+        
         const callers = await store.query(`
-          SELECT *, 
-                 (SELECT path FROM file WHERE id = $parent.fileId)[0].path as filePath
-          FROM symbol 
-          WHERE id IN (SELECT VALUE in FROM calls, inherits, implements, references WHERE out IN $targets)
-        `, { targets: targetIds });
+          SELECT *, (SELECT path FROM file WHERE id = $parent.fileId)[0].path as filePath
+          FROM symbol
+          WHERE id IN $ids
+        `, { ids: allIds });
         
         const response = budget.truncate({ 
           symbol: args.symbol_name, 
@@ -78,32 +113,6 @@ export function createSymbolTools(store: IStore, repoPath: string, budget: Token
           references: callers 
         });
         
-        return {
-          content: [{ type: 'text', text: JSON.stringify(response, null, 2) }],
-        };
-      },
-    },
-    {
-      name: 'get_dependencies',
-      description: 'Get the import dependencies for a specific file.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          file_path: { type: 'string', description: 'Relative path to the file' }
-        },
-        required: ['file_path'],
-      },
-      handler: async (args: any) => {
-        const fileRes = await store.query<any>('SELECT id FROM file WHERE path = $path LIMIT 1', { path: args.file_path });
-        if (fileRes.length === 0) {
-          return { content: [{ type: 'text', text: `File not found: ${args.file_path}` }], isError: true };
-        }
-        
-        const fileId = fileRes[0].id;
-        // Find all modules/files imported by this file
-        const imports = await store.query('SELECT out.* as target FROM imports WHERE in = $fileId', { fileId });
-        
-        const response = budget.truncate({ file: args.file_path, dependencies: imports });
         return {
           content: [{ type: 'text', text: JSON.stringify(response, null, 2) }],
         };

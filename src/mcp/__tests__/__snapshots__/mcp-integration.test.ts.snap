@@ -1,0 +1,642 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`MCP Integration Tests (Express.js Bench) > fetch_symbol_metadata for known symbol 1`] = `
+{
+  "_token_count": 19,
+  "_truncated": false,
+  "count": 1,
+  "symbols": [
+    {
+      "kind": "function",
+      "metadata": {},
+      "name": "createApplication",
+    },
+  ],
+}
+`;
+
+exports[`MCP Integration Tests (Express.js Bench) > find_references for "createApplication" 1`] = `
+{
+  "_token_count": 15,
+  "_truncated": false,
+  "referenceCount": 0,
+  "references": [],
+  "symbol": "createApplication",
+}
+`;
+
+exports[`MCP Integration Tests (Express.js Bench) > get_code_overview (lib directory) 1`] = `
+{
+  "_token_count": 61,
+  "_truncated": false,
+  "structure": {
+    "children": [
+      {
+        "name": "application.js",
+        "type": "file",
+      },
+      {
+        "name": "express.js",
+        "type": "file",
+      },
+      {
+        "name": "request.js",
+        "type": "file",
+      },
+      {
+        "name": "response.js",
+        "type": "file",
+      },
+      {
+        "name": "utils.js",
+        "type": "file",
+      },
+      {
+        "name": "view.js",
+        "type": "file",
+      },
+    ],
+    "name": "lib",
+    "type": "module",
+  },
+}
+`;
+
+exports[`MCP Integration Tests (Express.js Bench) > get_dependencies for lib/express.js 1`] = `
+{
+  "_token_count": 363,
+  "_truncated": false,
+  "dependencies": [
+    {
+      "id": "module:body_parser",
+      "is_root": false,
+      "name": "body-parser",
+      "type": "module",
+    },
+    {
+      "id": "module:serve_static",
+      "is_root": false,
+      "name": "serve-static",
+      "type": "module",
+    },
+    {
+      "id": "module:router",
+      "name": "router",
+      "type": "module",
+    },
+    {
+      "content_hash": "d5645ebe62c8e914efd4343da17c8d6209bad7e354f003b1264d234f6aa7697d",
+      "ext": ".js",
+      "git_hash": "e7a451df6d9ed7798c4242b3bb1ede44719ee2cf",
+      "id": "file:lib_request_js",
+      "language": "typescript",
+      "last_parsed": "2026-05-13T18:46:42.345Z",
+      "line_count": 528,
+      "module_id": "module:lib",
+      "mtime": "2026-05-13T18:46:40.966Z",
+      "parse_status": "parsed",
+      "path": "lib/request.js",
+      "size_bytes": 12254,
+      "type": "file",
+    },
+    {
+      "content_hash": "5fe7b091799a1b914c43d92a80bcd679bfb4af832f21a07fac8e60fc8982a0da",
+      "ext": ".js",
+      "git_hash": "f965e539dd260cc88b7745e9db9154d721751308",
+      "id": "file:lib_response_js",
+      "language": "typescript",
+      "last_parsed": "2026-05-13T18:46:42.392Z",
+      "line_count": 1048,
+      "module_id": "module:lib",
+      "mtime": "2026-05-13T18:46:40.966Z",
+      "parse_status": "parsed",
+      "path": "lib/response.js",
+      "size_bytes": 24844,
+      "type": "file",
+    },
+    {
+      "id": "module:merge_descriptors",
+      "is_root": false,
+      "name": "merge-descriptors",
+      "type": "module",
+    },
+    {
+      "id": "module:node_events",
+      "is_root": false,
+      "name": "node:events",
+      "type": "module",
+    },
+    {
+      "content_hash": "505ba52497bd41ef401f04a2c0cb4d16fcfbd6d490bb0e0420a4637a79a794ab",
+      "ext": ".js",
+      "git_hash": "47be2a20c1af0c61f5ac207c077e78058f9ff34e",
+      "id": "file:lib_application_js",
+      "language": "typescript",
+      "last_parsed": "2026-05-13T18:46:42.358Z",
+      "line_count": 632,
+      "module_id": "module:lib",
+      "mtime": "2026-05-13T18:46:40.965Z",
+      "parse_status": "parsed",
+      "path": "lib/application.js",
+      "size_bytes": 13977,
+      "type": "file",
+    },
+  ],
+  "file": "lib/express.js",
+}
+`;
+
+exports[`MCP Integration Tests (Express.js Bench) > get_file_tree (root) 1`] = `
+{
+  "_token_count": 712,
+  "_truncated": false,
+  "structure": {
+    "children": [
+      {
+        "children": [
+          {
+            "name": "index.js",
+            "type": "file",
+          },
+        ],
+        "name": "auth",
+        "type": "package",
+      },
+      {
+        "children": [
+          {
+            "name": "db.js",
+            "type": "file",
+          },
+          {
+            "name": "index.js",
+            "type": "file",
+          },
+          {
+            "name": "users.js",
+            "type": "file",
+          },
+        ],
+        "name": "content-negotiation",
+        "type": "package",
+      },
+      {
+        "children": [
+          {
+            "name": "index.js",
+            "type": "file",
+          },
+        ],
+        "name": "cookie-sessions",
+        "type": "package",
+      },
+      {
+        "children": [
+          {
+            "name": "index.js",
+            "type": "file",
+          },
+        ],
+        "name": "cookies",
+        "type": "package",
+      },
+      {
+        "children": [
+          {
+            "name": "index.js",
+            "type": "file",
+          },
+        ],
+        "name": "downloads",
+        "type": "package",
+      },
+      {
+        "children": [
+          {
+            "name": "index.js",
+            "type": "file",
+          },
+        ],
+        "name": "ejs",
+        "type": "package",
+      },
+      {
+        "children": [
+          {
+            "name": "index.js",
+            "type": "file",
+          },
+        ],
+        "name": "error",
+        "type": "package",
+      },
+      {
+        "children": [
+          {
+            "name": "index.js",
+            "type": "file",
+          },
+        ],
+        "name": "error-pages",
+        "type": "package",
+      },
+      {
+        "children": [
+          {
+            "name": "index.js",
+            "type": "file",
+          },
+        ],
+        "name": "hello-world",
+        "type": "package",
+      },
+      {
+        "children": [
+          {
+            "name": "index.js",
+            "type": "file",
+          },
+        ],
+        "name": "markdown",
+        "type": "package",
+      },
+      {
+        "children": [
+          {
+            "name": "controllers",
+            "type": "module",
+          },
+          {
+            "name": "index.js",
+            "type": "file",
+          },
+        ],
+        "name": "multi-router",
+        "type": "package",
+      },
+      {
+        "children": [
+          {
+            "name": "lib",
+            "type": "module",
+          },
+          {
+            "name": "main",
+            "type": "package",
+          },
+          {
+            "name": "pet",
+            "type": "package",
+          },
+          {
+            "name": "user",
+            "type": "package",
+          },
+          {
+            "name": "user-pet",
+            "type": "package",
+          },
+          {
+            "name": "db.js",
+            "type": "file",
+          },
+          {
+            "name": "index.js",
+            "type": "file",
+          },
+        ],
+        "name": "mvc",
+        "type": "package",
+      },
+      {
+        "children": [
+          {
+            "name": "index.js",
+            "type": "file",
+          },
+        ],
+        "name": "online",
+        "type": "package",
+      },
+      {
+        "children": [
+          {
+            "name": "index.js",
+            "type": "file",
+          },
+        ],
+        "name": "params",
+        "type": "package",
+      },
+      {
+        "children": [
+          {
+            "name": "index.js",
+            "type": "file",
+          },
+        ],
+        "name": "resource",
+        "type": "package",
+      },
+      {
+        "children": [
+          {
+            "name": "index.js",
+            "type": "file",
+          },
+        ],
+        "name": "route-map",
+        "type": "package",
+      },
+      {
+        "children": [
+          {
+            "name": "index.js",
+            "type": "file",
+          },
+        ],
+        "name": "route-middleware",
+        "type": "package",
+      },
+      {
+        "children": [
+          {
+            "name": "index.js",
+            "type": "file",
+          },
+          {
+            "name": "post.js",
+            "type": "file",
+          },
+          {
+            "name": "site.js",
+            "type": "file",
+          },
+          {
+            "name": "user.js",
+            "type": "file",
+          },
+        ],
+        "name": "route-separation",
+        "type": "package",
+      },
+      {
+        "children": [
+          {
+            "name": "public",
+            "type": "module",
+          },
+          {
+            "name": "index.js",
+            "type": "file",
+          },
+        ],
+        "name": "search",
+        "type": "package",
+      },
+      {
+        "children": [
+          {
+            "name": "index.js",
+            "type": "file",
+          },
+          {
+            "name": "redis.js",
+            "type": "file",
+          },
+        ],
+        "name": "session",
+        "type": "package",
+      },
+      {
+        "children": [
+          {
+            "name": "js",
+            "type": "module",
+          },
+          {
+            "name": "index.js",
+            "type": "file",
+          },
+        ],
+        "name": "static-files",
+        "type": "package",
+      },
+      {
+        "children": [
+          {
+            "name": "index.js",
+            "type": "file",
+          },
+        ],
+        "name": "vhost",
+        "type": "package",
+      },
+      {
+        "children": [
+          {
+            "name": "github-view.js",
+            "type": "file",
+          },
+          {
+            "name": "index.js",
+            "type": "file",
+          },
+        ],
+        "name": "view-constructor",
+        "type": "package",
+      },
+      {
+        "children": [
+          {
+            "name": "index.js",
+            "type": "file",
+          },
+          {
+            "name": "user.js",
+            "type": "file",
+          },
+        ],
+        "name": "view-locals",
+        "type": "package",
+      },
+      {
+        "children": [
+          {
+            "name": "index.js",
+            "type": "file",
+          },
+        ],
+        "name": "web-service",
+        "type": "package",
+      },
+      {
+        "children": [
+          {
+            "name": "application.js",
+            "type": "file",
+          },
+          {
+            "name": "express.js",
+            "type": "file",
+          },
+          {
+            "name": "request.js",
+            "type": "file",
+          },
+          {
+            "name": "response.js",
+            "type": "file",
+          },
+          {
+            "name": "utils.js",
+            "type": "file",
+          },
+          {
+            "name": "view.js",
+            "type": "file",
+          },
+        ],
+        "name": "lib",
+        "type": "module",
+      },
+      {
+        "children": [
+          {
+            "name": "acceptance",
+            "type": "module",
+          },
+          {
+            "name": "support",
+            "type": "module",
+          },
+          {
+            "name": "... (+70 more files)",
+            "type": "summary",
+          },
+        ],
+        "name": "test",
+        "type": "module",
+      },
+      {
+        "name": "index.js",
+        "type": "file",
+      },
+    ],
+    "name": "express",
+    "type": "repository",
+  },
+}
+`;
+
+exports[`MCP Integration Tests (Express.js Bench) > query_symbol "createApplication" 1`] = `
+{
+  "_token_count": 73,
+  "_truncated": false,
+  "symbols": [
+    {
+      "endCol": 1,
+      "endLine": 56,
+      "fileId": "file:lib_express_js",
+      "filePath": "lib/express.js",
+      "id": "symbol:d4499403_createApplication_function_36",
+      "isExported": false,
+      "kind": "function",
+      "metadata": {},
+      "modifiers": [],
+      "name": "createApplication",
+      "signature": "function createApplication()",
+      "startCol": 0,
+      "startLine": 36,
+      "type": "symbol",
+    },
+  ],
+}
+`;
+
+exports[`MCP Integration Tests (Express.js Bench) > search_codebase for "createApplication" 1`] = `
+{
+  "_token_count": 41,
+  "_truncated": false,
+  "matchCount": 1,
+  "matches": [
+    {
+      "filePath": "lib/express.js",
+      "id": "symbol:d4499403_createApplication_function_36",
+      "kind": "function",
+      "name": "createApplication",
+    },
+  ],
+  "query": "createApplication",
+}
+`;
+
+exports[`MCP Integration Tests (Express.js Bench) > smart_file_read (skeleton) lib/express.js 1`] = `
+{
+  "_token_count": 244,
+  "_truncated": false,
+  "content": "/*!
+    /* [body] */
+ */
+
+'use strict';
+
+/**
+ * Module dependencies.
+ */
+
+var bodyParser = require('body-parser')
+var EventEmitter = require('node:events').EventEmitter;
+var mixin = require('merge-descriptors');
+var proto = require('./application');
+var Router = require('router');
+var req = require('./request');
+var res = require('./response');
+
+/**
+ * Expose \`createApplication()\`.
+ */
+
+exports = module.exports = createApplication;
+
+/**
+    /* [body] */
+ */
+
+function createApplication() {
+  var app = function(req, res, next) {
+    /* [body] */
+  };
+    /* [body] */
+}
+
+/**
+ * Expose the prototypes.
+ */
+
+exports.application = proto;
+exports.request = req;
+exports.response = res;
+
+/**
+ * Expose constructors.
+ */
+
+exports.Route = Router.Route;
+exports.Router = Router;
+
+/**
+ * Expose middleware
+ */
+
+exports.json = bodyParser.json
+exports.raw = bodyParser.raw
+exports.static = require('serve-static');
+exports.text = bodyParser.text
+exports.urlencoded = bodyParser.urlencoded
+",
+  "mode_used": "skeleton",
+  "symbol_count": 9,
+  "warnings": [],
+}
+`;

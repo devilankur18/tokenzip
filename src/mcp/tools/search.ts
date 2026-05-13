@@ -21,11 +21,9 @@ export function createSearchTools(store: IStore, repoPath: string, budget: Token
         const results = await store.query(`
           SELECT 
             id, name, kind, docstring, 
-            (SELECT path FROM file WHERE id = $parent.fileId)[0].path as filePath,
-            search::score(1) as score
+            (SELECT path FROM file WHERE id = $parent.fileId)[0].path as filePath
           FROM symbol 
-          WHERE name @1@ $q OR docstring @1@ $q
-          ORDER BY score DESC
+          WHERE name CONTAINS $q OR docstring CONTAINS $q
           LIMIT $limit
         `, { q: query, limit });
 

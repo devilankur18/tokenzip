@@ -297,6 +297,21 @@ async function executeStructureQuery(store: IStore, budget: TokenBudgetManager, 
   promoteModules(fullTree);
   computeRecursiveStats(fullTree);
 
+  // 4. Sort children for deterministic output
+  const sortNodes = (node: any) => {
+    if (node.children && node.children.length > 0) {
+      node.children.sort((a: any, b: any) => {
+        if (a.type !== b.type) {
+          if (a.type === 'module' || a.type === 'package') return -1;
+          if (b.type === 'module' || b.type === 'package') return 1;
+        }
+        return (a.name || '').localeCompare(b.name || '');
+      });
+      for (const child of node.children) sortNodes(child);
+    }
+  };
+  sortNodes(fullTree);
+
   const pruneAndFold = (node: any, currentDepth: number) => {
     let isAtFocus = focusPath ? (node.path === focusPath || (node.path && node.path.startsWith(focusPath + '/')) || (focusPath.startsWith(node.path + '/'))) : false;
 
@@ -385,7 +400,7 @@ export function createStructureTools(store: IStore, repoPath: string, budget: To
           return await executeStructureQuery(store, budget, {
             ...args,
             showSymbols: false, // Default to compact for file_tree
-            format: 'tree'
+            format: args.format || 'tree'
           });
         } catch (err: any) {
           return { content: [{ type: 'text', text: err.message }], isError: true };
