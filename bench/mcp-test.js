@@ -224,10 +224,10 @@ async function runTests() {
   );
 
   await test(
-    'get_file_symbols: src/index.ts',
+    'get_file_symbols: lib/express.js',
     'List all symbols defined in the main entry point',
     'get_file_symbols',
-    { file_path: 'src/index.ts' }
+    { file_path: 'lib/express.js' }
   );
 
   await test(
@@ -238,10 +238,10 @@ async function runTests() {
   );
 
   await test(
-    'smart_file_read: src/index.ts (skeleton)',
+    'smart_file_read: lib/express.js (skeleton)',
     'Read semantic projection of the entry point',
     'smart_file_read',
-    { path: 'src/index.ts', mode: 'skeleton' }
+    { path: 'lib/express.js', mode: 'skeleton' }
   );
 
   // ─── summary ──────────────────────────────────────────────────────────────

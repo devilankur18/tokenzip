@@ -43,6 +43,10 @@ const App: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [repoInfo, setRepoInfo] = useState<{ name: string; path: string } | null>(null);
   const [isSearching, setIsSearching] = useState(false);
+  const [filters, setFilters] = useState({
+    nodes: { file: true, symbol: true },
+    edges: { calls: true, contains: true, imports: true, implements: true, exports: true, references: true }
+  });
   const fgRef = useRef<any>();
 
   const urlParams = new URLSearchParams(window.location.search);
@@ -69,31 +73,25 @@ const App: React.FC = () => {
 
   const fetchData = async (surreal: Surreal) => {
     try {
-      // Increase limits to handle medium-sized codebases better
-      // Fetch files and symbols separately to ensure we get both in large repos
-      const fileRes = await surreal.query<any[][]>('SELECT * FROM file LIMIT 2000');
-      const symbolRes = await surreal.query<any[][]>('SELECT * FROM symbol LIMIT 8000');
+      // Progressive Loading: Load files and their relationships first
+      const fileRes = await surreal.query<any[][]>('SELECT * FROM file LIMIT 3000');
       
-      const rawNodes = [...(fileRes[0] || []), ...(symbolRes[0] || [])];
-      
-      const nodes: Node[] = rawNodes.map((n: any) => {
+      const nodes: Node[] = (fileRes[0] || []).map((n: any) => {
         const idStr = n.id.toString();
-        const isFile = idStr.startsWith('file:');
         return {
           id: idStr,
-          type: n.type || (isFile ? 'file' : 'symbol'),
-          name: n.name || idStr.split(':')[1] || idStr,
+          type: 'file',
+          name: n.path.split('/').pop() || n.path || idStr,
           path: n.path,
-          signature: n.signature,
-          docs: n.doc,
-          val: isFile ? 8 : 3,
-          color: isFile ? '#6366f1' : '#a855f7'
+          val: 10,
+          color: '#6366f1'
         };
       });
 
       const nodeIds = new Set(nodes.map(n => n.id));
 
-      const edgeRes = await surreal.query<any[][]>('SELECT *, in as source, out as target FROM contains, imports, exports, calls, implements, inherits, modifies, reads, references, depends_on LIMIT 30000');
+      // Initially only load architectural edges (imports, exports, depends_on)
+      const edgeRes = await surreal.query<any[][]>('SELECT *, in as source, out as target FROM imports, exports, depends_on LIMIT 20000');
       const links: Edge[] = (edgeRes[0] || [])
         .map((e: any) => ({
           id: e.id.toString(),
@@ -191,29 +189,80 @@ const App: React.FC = () => {
 
   const [edgeCounts, setEdgeCounts] = useState<{ in: number, out: number }>({ in: 0, out: 0 });
 
+  const visibleData = useMemo(() => {
+    let nodes = graphData.nodes.filter(n => (filters.nodes as any)[n.type]);
+    
+    // If we have search matches, we only show those and their direct neighbors
+    if (searchResults.length > 0) {
+      const matchIds = new Set(searchResults.map(s => s.id));
+      const relatedLinks = graphData.links.filter(l => 
+        matchIds.has(typeof l.source === 'object' ? (l.source as any).id : l.source) || 
+        matchIds.has(typeof l.target === 'object' ? (l.target as any).id : l.target)
+      );
+      const relatedNodeIds = new Set([
+        ...searchResults.map(s => s.id),
+        ...relatedLinks.map(l => typeof l.source === 'object' ? (l.source as any).id : (l.source as string)),
+        ...relatedLinks.map(l => typeof l.target === 'object' ? (l.target as any).id : (l.target as string))
+      ]);
+      nodes = nodes.filter(n => relatedNodeIds.has(n.id));
+    }
+
+    const nodeIds = new Set(nodes.map(n => n.id));
+    const links = graphData.links.filter(l => 
+      (filters.edges as any)[l.type] &&
+      nodeIds.has(typeof l.source === 'object' ? (l.source as any).id : l.source) &&
+      nodeIds.has(typeof l.target === 'object' ? (l.target as any).id : l.target)
+    );
+
+    return { nodes, links };
+  }, [graphData, filters, searchResults]);
+
+  const toggleFilter = (category: 'nodes' | 'edges', type: string) => {
+    setFilters(prev => ({
+      ...prev,
+      [category]: {
+        ...(prev as any)[category],
+        [type]: !(prev as any)[category][type]
+      }
+    }));
+  };
+
+  const [edgeStats, setEdgeStats] = useState<Record<string, { in: number, out: number }>>({});
+
   useEffect(() => {
     if (!selectedNode || !db) return;
     
-    const fetchCounts = async () => {
+    const fetchStats = async () => {
       try {
         const res = await db.query(
-          `SELECT count() as count FROM (
+          `SELECT count() as count, meta::tb(id) as type, 'out' as dir FROM (
             SELECT id FROM contains, imports, exports, calls, implements, inherits, modifies, reads, references, depends_on WHERE in = type::record($id)
-          ) GROUP ALL;
-          SELECT count() as count FROM (
+          ) GROUP BY type;
+          SELECT count() as count, meta::tb(id) as type, 'in' as dir FROM (
             SELECT id FROM contains, imports, exports, calls, implements, inherits, modifies, reads, references, depends_on WHERE out = type::record($id)
-          ) GROUP ALL;`,
+          ) GROUP BY type;`,
           { id: selectedNode.id }
         );
-        const outCount = (res as any)?.[0]?.[0]?.count || 0;
-        const inCount = (res as any)?.[1]?.[0]?.count || 0;
-        setEdgeCounts({ in: inCount, out: outCount });
+        
+        const stats: Record<string, { in: number, out: number }> = {};
+        
+        const processResults = (results: any[], dir: 'in' | 'out') => {
+          (results || []).forEach((r: any) => {
+            if (!stats[r.type]) stats[r.type] = { in: 0, out: 0 };
+            stats[r.type][dir] = r.count;
+          });
+        };
+
+        processResults((res as any)?.[0] || [], 'out');
+        processResults((res as any)?.[1] || [], 'in');
+        
+        setEdgeStats(stats);
       } catch (err) {
-        console.error('Failed to fetch edge counts:', err);
+        console.error('Failed to fetch edge stats:', err);
       }
     };
     
-    fetchCounts();
+    fetchStats();
   }, [selectedNode, db]);
 
   const handleNodeClick = (node: any) => {
@@ -232,11 +281,58 @@ const App: React.FC = () => {
     }
   };
 
+  const expandFileSymbols = async (fileNode: Node) => {
+    if (!db) return;
+    try {
+      // Get all symbols and their contains edges for this file
+      const res = await db.query<any[][]>(
+        `SELECT * FROM symbol WHERE id IN (SELECT VALUE out FROM contains WHERE in = type::record($id));
+         SELECT *, in as source, out as target FROM contains WHERE in = type::record($id);`,
+        { id: fileNode.id }
+      );
+      
+      const symbols = (res[0] || []).map((n: any) => ({
+        ...n,
+        id: n.id.toString(),
+        type: 'symbol',
+        name: n.name,
+        val: 3,
+        color: '#a855f7'
+      }));
+
+      const newEdges = (res[1] || []).map((e: any) => ({
+        id: e.id.toString(),
+        source: e.source.toString(),
+        target: e.target.toString(),
+        type: 'contains'
+      }));
+
+      if (symbols.length === 0) {
+        console.log("No symbols found for file:", fileNode.id);
+      }
+
+      setGraphData(prev => {
+        const existingNodeIds = new Set(prev.nodes.map(n => n.id));
+        const filteredSymbols = symbols.filter(s => !existingNodeIds.has(s.id));
+        
+        const existingEdgeIds = new Set(prev.links.map(l => l.id));
+        const filteredEdges = newEdges.filter(e => !existingEdgeIds.has(e.id));
+
+        return {
+          nodes: [...prev.nodes, ...filteredSymbols],
+          links: [...prev.links, ...filteredEdges]
+        };
+      });
+    } catch (err) {
+      console.error('Failed to expand file symbols:', err);
+    }
+  };
+
   const expandNeighbors = async (node: Node) => {
     if (!db) return;
     try {
       const res = await db.query(
-        'SELECT *, in as source, out as target, meta::table(id) as type FROM contains, imports, exports, calls, implements, inherits, modifies, reads, references, depends_on WHERE in = type::record($id) OR out = type::record($id) LIMIT 200',
+        'SELECT *, in as source, out as target, meta::tb(id) as type FROM contains, imports, exports, calls, implements, inherits, modifies, reads, references, depends_on WHERE in = type::record($id) OR out = type::record($id) LIMIT 200',
         { id: node.id }
       );
       
@@ -308,13 +404,16 @@ const App: React.FC = () => {
         <>
           <ForceGraph2D
             ref={fgRef}
-            graphData={graphData}
+            graphData={visibleData}
             nodeLabel={(node: any) => `${node.type}: ${node.name}`}
             nodeColor={(node: any) => node.color}
             nodeRelSize={4}
-            linkDirectionalArrowLength={3}
+            linkDirectionalArrowLength={(link: any) => link.type === 'imports' ? 5 : 3}
             linkDirectionalArrowRelPos={1}
             linkCurvature={0.25}
+            linkDirectionalParticles={(link: any) => (link.type === 'calls' || link.type === 'imports') ? 2 : 0}
+            linkDirectionalParticleSpeed={0.005}
+            linkDirectionalParticleWidth={1.5}
             onNodeClick={handleNodeClick}
             backgroundColor="#0d0d12"
             linkColor={getLinkColor}
@@ -374,18 +473,38 @@ const App: React.FC = () => {
               </div>
 
               <div className="legend-section">
-                <h4>GRAPH LEGEND</h4>
+                <h4>GRAPH LEGEND & FILTERS</h4>
                 <div className="legend-group">
                   <h5>Nodes</h5>
-                  <div className="legend-item"><span className="node-dot file"></span> File</div>
-                  <div className="legend-item"><span className="node-dot symbol"></span> Symbol</div>
+                  <div 
+                    className={`legend-item filterable ${filters.nodes.file ? 'active' : ''}`}
+                    onClick={() => toggleFilter('nodes', 'file')}
+                  >
+                    <span className="node-dot file"></span> File
+                  </div>
+                  <div 
+                    className={`legend-item filterable ${filters.nodes.symbol ? 'active' : ''}`}
+                    onClick={() => toggleFilter('nodes', 'symbol')}
+                  >
+                    <span className="node-dot symbol"></span> Symbol
+                  </div>
                 </div>
                 <div className="legend-group">
                   <h5>Edges</h5>
-                  <div className="legend-item"><span className="edge-line calls"></span> Calls</div>
-                  <div className="legend-item"><span className="edge-line contains"></span> Contains</div>
-                  <div className="legend-item"><span className="edge-line imports"></span> Imports</div>
-                  <div className="legend-item"><span className="edge-line implements"></span> Implements</div>
+                  {[
+                    { id: 'calls', label: 'Calls', color: 'calls' },
+                    { id: 'contains', label: 'Contains', color: 'contains' },
+                    { id: 'imports', label: 'Imports', color: 'imports' },
+                    { id: 'implements', label: 'Implements', color: 'implements' }
+                  ].map(edge => (
+                    <div 
+                      key={edge.id}
+                      className={`legend-item filterable ${filters.edges[edge.id as keyof typeof filters.edges] ? 'active' : ''}`}
+                      onClick={() => toggleFilter('edges', edge.id)}
+                    >
+                      <span className={`edge-line ${edge.color}`}></span> {edge.label}
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>
@@ -413,22 +532,63 @@ const App: React.FC = () => {
                 )}
 
                 <div className="stats-row">
-                  <div className="stat-item">
-                    <label>INCOMING</label>
-                    <div className="stat-value">{edgeCounts.in}</div>
+                  <div className="stat-card">
+                    <label>Incoming Relationships</label>
+                    <div className="stats-list">
+                      {Object.entries(edgeStats).filter(([_, s]) => s.in > 0).map(([type, s]) => (
+                        <div key={type} className="stat-line">
+                          <span className={`type-dot ${type}`}></span>
+                          <span className="type-name">{type}</span>
+                          <span className="type-count">{s.in}</span>
+                        </div>
+                      ))}
+                      {Object.values(edgeStats).every(s => s.in === 0) && <div className="no-stats">None</div>}
+                    </div>
                   </div>
-                  <div className="stat-item">
-                    <label>OUTGOING</label>
-                    <div className="stat-value">{edgeCounts.out}</div>
+                  <div className="stat-card">
+                    <label>Outgoing Relationships</label>
+                    <div className="stats-list">
+                      {Object.entries(edgeStats).filter(([_, s]) => s.out > 0).map(([type, s]) => (
+                        <div key={type} className="stat-line">
+                          <span className={`type-dot ${type}`}></span>
+                          <span className="type-name">{type}</span>
+                          <span className="type-count">{s.out}</span>
+                        </div>
+                      ))}
+                      {Object.values(edgeStats).every(s => s.out === 0) && <div className="no-stats">None</div>}
+                    </div>
                   </div>
                 </div>
+
+                {(() => {
+                  const visibleLinksCount = graphData.links.filter(l => 
+                    (typeof l.source === 'object' ? (l.source as any).id : l.source) === selectedNode.id || 
+                    (typeof l.target === 'object' ? (l.target as any).id : l.target) === selectedNode.id
+                  ).length;
+                  const totalLinksCount = Object.values(edgeStats).reduce((acc, s) => acc + s.in + s.out, 0);
+                  
+                  if (totalLinksCount > visibleLinksCount) {
+                    return (
+                      <div className="connectivity-warning">
+                        <Info size={16} />
+                        <span>{totalLinksCount - visibleLinksCount} connections are currently hidden.</span>
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
 
                 <div className="actions-group">
                   <label>EXPLORATION ACTIONS</label>
                   <div className="action-buttons">
-                    <button className="action-btn primary" onClick={() => expandNeighbors(selectedNode)}>
-                      <Maximize2 size={16} /> Expand Neighborhood
+                  {selectedNode.type === 'file' && (
+                    <button className="action-btn primary" onClick={() => expandFileSymbols(selectedNode)}>
+                      <Zap size={16} /> Show Internal Symbols
                     </button>
+                  )}
+                  <button className="action-btn secondary" onClick={() => expandNeighbors(selectedNode)}>
+                    <Maximize2 size={16} /> Expand Neighborhood
+                  </button>
                     <button className="action-btn secondary" onClick={() => {
                       const relatedEdges = graphData.links.filter(l => 
                         (typeof l.source === 'object' ? l.source.id : l.source) === selectedNode.id || 

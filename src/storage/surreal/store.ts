@@ -26,11 +26,11 @@ export class SurrealStore implements IStore {
     this.forcedPort = forcedPort;
   }
 
-  async initialize(): Promise<void> {
+  async initialize(): Promise<boolean> {
     if (this.dbPath.startsWith('mem:')) {
       await this.db.connect(this.dbPath);
       await this.db.use({ namespace: 'tokenzip', database: 'graph' });
-      return;
+      return true;
     }
 
     const parent = path.dirname(this.dbPath);
@@ -45,15 +45,13 @@ export class SurrealStore implements IStore {
     if (fs.existsSync(portPath)) {
       try {
         const port = fs.readFileSync(portPath, 'utf8').trim();
-        // console.log(`Connecting to existing server at http://127.0.0.1:${port}...`);
         await this.db.connect(`http://127.0.0.1:${port}`);
         await this.db.signin({ username: 'root', password: 'root' });
         await this.db.use({ namespace: 'tokenzip', database: 'graph' });
-        return;
+        return false; // Not the owner
       } catch (err) {
-        console.log('Existing server not responding, cleaning up stale port/lock...');
+        console.log('Existing server not responding, cleaning up stale port...');
         try { fs.unlinkSync(portPath); } catch {}
-        try { fs.unlinkSync(lockPath); } catch {}
       }
     }
 
@@ -69,12 +67,10 @@ export class SurrealStore implements IStore {
           try { fs.unlinkSync(lockPath); } catch {}
           return this.initialize();
         }
-      } catch (readErr) {
-        // If we can't read it, assume it's valid for now
-      }
+      } catch (readErr) {}
 
-      console.log('Another process is starting the server, waiting...');
-      await new Promise(r => setTimeout(r, 2000));
+      // console.log('Another process is starting the server, waiting...');
+      await new Promise(r => setTimeout(r, 1000 + Math.random() * 1000));
       return this.initialize();
     }
 
@@ -82,7 +78,6 @@ export class SurrealStore implements IStore {
     const repoPath = path.resolve(parent, '..');
     const port = this.forcedPort || this.getDeterministicPort(repoPath);
 
-    // console.log(`Starting background SurrealDB server on port ${port} for ${this.dbPath}...`);
     await this.startBackgroundServer(port);
     
     try {
@@ -90,17 +85,18 @@ export class SurrealStore implements IStore {
       await this.db.signin({ username: 'root', password: 'root' });
       await this.db.use({ namespace: 'tokenzip', database: 'graph' });
       fs.writeFileSync(portPath, port.toString());
-      // console.log('Connected to background server.');
+
+      // Register cleanup on exit
+      process.on('exit', () => this.cleanup());
+      process.on('SIGINT', () => { this.cleanup(); process.exit(); });
+      process.on('SIGTERM', () => { this.cleanup(); process.exit(); });
+
+      return true; // We are the owner
     } catch (err) {
       console.error('Failed to connect to newly started server:', err);
       this.cleanup();
       throw err;
     }
-
-    // Register cleanup on exit
-    process.on('exit', () => this.cleanup());
-    process.on('SIGINT', () => { this.cleanup(); process.exit(); });
-    process.on('SIGTERM', () => { this.cleanup(); process.exit(); });
   }
 
   private getDeterministicPort(repoPath: string): number {
@@ -136,9 +132,20 @@ export class SurrealStore implements IStore {
       stdio: ['ignore', logStream, logStream]
     });
 
+    let earlyExitError: string | null = null;
+    this.serverProcess.on('exit', (code) => {
+      earlyExitError = `SurrealDB process exited with code ${code}. Check ${logFile} for details.`;
+    });
+    this.serverProcess.on('error', (err) => {
+      earlyExitError = `Failed to start SurrealDB: ${err.message}`;
+    });
+
     // Wait for the server to be ready (poll the port)
     let retries = 0;
-    while (retries < 50) {
+    while (retries < 100) {
+      if (earlyExitError) {
+        throw new Error(earlyExitError);
+      }
       if (await this.isPortOpen(port)) {
         return;
       }

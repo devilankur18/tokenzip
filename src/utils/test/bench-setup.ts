@@ -33,26 +33,41 @@ export async function setupBenchRepo(options: BenchSetupOptions = {}) {
 
   // 2. Initialize store
   const dbPath = path.join(BENCH_REPO_PATH, '.tokenzip/db');
-  // Use a deterministic port based on the path
   const store = new SurrealStore(dbPath);
-  await store.initialize();
-  await store.migrate();
+  const isOwner = await store.initialize();
+  
+  if (isOwner) {
+    await store.migrate();
+  }
 
   // 3. Check if indexing is needed
-  const stats = await store.stats();
-  const symbolCount = Object.values(stats.nodeCount).reduce((a, b) => a + b, 0);
+  let stats = await store.stats();
+  let symbolCount = Object.values(stats.nodeCount).reduce((a, b) => a + b, 0);
 
   if (symbolCount < 100 || forceIndex) {
-    if (forceIndex) {
-      console.log('\x1b[33m\u1F504 Force re-indexing benchmark repo...\x1b[0m');
-      await store.clear();
+    if (isOwner) {
+      if (forceIndex) {
+        console.log('\x1b[33m\u1F504 Force re-indexing benchmark repo...\x1b[0m');
+        await store.clear();
+      } else {
+        console.log('\x1b[34m\u23F1  Indexing benchmark repo for the first time...\x1b[0m');
+      }
+      
+      const indexer = new Indexer(store, BENCH_REPO_PATH, { concurrency });
+      await indexer.indexCodebase();
+      console.log('\x1b[32m\u2705 Indexing complete.\x1b[0m');
     } else {
-      console.log('\x1b[34m\u23F1  Indexing benchmark repo for the first time (this may take a minute)...\x1b[0m');
+      // Wait for owner to finish indexing
+      console.log('\x1b[34m\u23F1  Waiting for indexing to complete...\x1b[0m');
+      let retries = 0;
+      while (retries < 60) {
+        await new Promise(r => setTimeout(r, 2000));
+        stats = await store.stats();
+        symbolCount = Object.values(stats.nodeCount).reduce((a, b) => a + b, 0);
+        if (symbolCount >= 100) break;
+        retries++;
+      }
     }
-    
-    const indexer = new Indexer(store, BENCH_REPO_PATH, { concurrency });
-    await indexer.indexCodebase();
-    console.log('\x1b[32m\u2705 Indexing complete.\x1b[0m');
   }
 
   return {

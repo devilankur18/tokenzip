@@ -135,6 +135,14 @@ describe('MCP Integration Tests (Express.js Bench)', () => {
     const data = JSON.parse(result.content[0].text);
     
     expect(data.dependencies).toBeDefined();
+    // Strip non-deterministic fields
+    if (data.dependencies) {
+      data.dependencies.forEach((d: any) => {
+        delete d.last_parsed;
+        delete d.mtime;
+      });
+    }
+    
     // In Express, express.js requires many things. We check if at least some are found.
     expect(data.dependencies.length).toBeGreaterThan(0);
     expect(data).toMatchSnapshot();

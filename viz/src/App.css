@@ -236,6 +236,26 @@ body {
   gap: 10px;
   font-size: 0.8rem;
   margin-bottom: 6px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.legend-item.filterable {
+  cursor: pointer;
+}
+
+.legend-item.filterable:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: #fff;
+}
+
+.legend-item.filterable:not(.active) {
+  opacity: 0.3;
+}
+
+.legend-item.filterable.active {
+  color: #fff;
 }
 
 .node-dot {
@@ -321,6 +341,27 @@ body {
   flex: 1;
 }
 
+.connectivity-warning {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(251, 191, 36, 0.1);
+  border: 1px solid rgba(251, 191, 36, 0.2);
+  color: #fbbf24;
+  padding: 12px;
+  border-radius: 8px;
+  font-size: 0.75rem;
+  margin-bottom: 20px;
+}
+
+.connectivity-warning span {
+  flex: 1;
+}
+
+.actions-group {
+  margin-top: 24px;
+}
+
 .info-group {
   margin-bottom: 24px;
 }
@@ -335,24 +376,68 @@ body {
 }
 
 .stats-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 16px;
   margin-bottom: 24px;
 }
 
-.stat-item {
-  flex: 1;
+.stat-card {
   background: rgba(255, 255, 255, 0.03);
-  padding: 12px;
-  border-radius: 8px;
-  border: 1px solid var(--border-color);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  padding: 16px;
 }
 
-.stat-value {
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: white;
-  font-family: monospace;
+.stat-card label {
+  display: block;
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 12px;
+}
+
+.stats-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.stat-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.type-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.type-dot.calls { background: #f87171; }
+.type-dot.contains { background: #818cf8; }
+.type-dot.imports { background: #34d399; }
+.type-dot.implements { background: #22d3ee; }
+
+.type-name {
+  font-size: 0.75rem;
+  color: var(--text-main);
+  text-transform: capitalize;
+  flex: 1;
+}
+
+.type-count {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #fff;
+}
+
+.no-stats {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-style: italic;
 }
 
 .path-text {

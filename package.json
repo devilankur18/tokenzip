@@ -39,7 +39,8 @@
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
-    "test": "vitest",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "prepublishOnly": "npm run build",
     "start": "node dist/cli/index.js",
     "bench:setup": "bash bench/setup.sh",

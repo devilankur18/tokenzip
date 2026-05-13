@@ -64,7 +64,7 @@ export function createSymbolTools(store: IStore, repoPath: string, budget: Token
         const fileId = fileRes[0].id;
         // Find all modules/files imported by this file
         const imports = await store.query('SELECT out as target FROM imports WHERE in = $fileId FETCH target', { fileId });
-        const dependencies = imports.map((i: any) => i.target);
+        const dependencies = imports.map((i: any) => i.target).sort((a: any, b: any) => (a.path || a.name || '').localeCompare(b.path || b.name || ''));
         
         const response = budget.truncate({ file: args.file_path, dependencies });
         return {
@@ -106,6 +106,8 @@ export function createSymbolTools(store: IStore, repoPath: string, budget: Token
           FROM symbol
           WHERE id IN $ids
         `, { ids: allIds });
+        
+        callers.sort((a: any, b: any) => (a.filePath || '').localeCompare(b.filePath || '') || a.startLine - b.startLine);
         
         const response = budget.truncate({ 
           symbol: args.symbol_name, 

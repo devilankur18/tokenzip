@@ -301,10 +301,10 @@ async function executeStructureQuery(store: IStore, budget: TokenBudgetManager, 
   const sortNodes = (node: any) => {
     if (node.children && node.children.length > 0) {
       node.children.sort((a: any, b: any) => {
-        if (a.type !== b.type) {
-          if (a.type === 'module' || a.type === 'package') return -1;
-          if (b.type === 'module' || b.type === 'package') return 1;
-        }
+        const typeOrder: Record<string, number> = { 'package': 1, 'module': 1, 'file': 2, 'symbol': 3 };
+        const aOrder = typeOrder[a.type] || 99;
+        const bOrder = typeOrder[b.type] || 99;
+        if (aOrder !== bOrder) return aOrder - bOrder;
         return (a.name || '').localeCompare(b.name || '');
       });
       for (const child of node.children) sortNodes(child);
