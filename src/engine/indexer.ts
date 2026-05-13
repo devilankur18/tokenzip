@@ -10,6 +10,7 @@ import { EdgeIR } from '../extractor/types.js';
 import { Worker } from 'node:worker_threads';
 import os from 'node:os';
 import { RecordId, StringRecordId } from 'surrealdb';
+import { GitUtils } from '../utils/git-utils.js';
 
 const IGNORE_DIRS = new Set(['node_modules', '.git', 'dist', 'build', '.next', '.tokenzip']);
 const SUPPORTED_EXTS = new Set(['.ts', '.tsx', '.js', '.jsx', '.go', '.py', '.java', '.c', '.cpp', '.h', '.hpp', '.rs', '.rb', '.php', '.swift', '.kt']);
@@ -25,10 +26,12 @@ export class Indexer {
   private store: IStore;
   private registry: ExtractorRegistry;
   private repoPath: string;
-  private unresolvedEdges: EdgeIR[] = [];
+  private unresolvedEdges: Map<string, EdgeIR> = new Map();
   private ignorePatterns: string[] = [];
   private concurrency: number;
   private options: IndexerOptions;
+  private cachedGitHashes: Map<string, string> | null = null;
+  private symbolCache: Map<string, RecordId[]> = new Map();
 
   constructor(store: IStore, repoPath: string, options: IndexerOptions = {}) {
     this.store = store;
@@ -107,6 +110,15 @@ export class Indexer {
     const fileIdStr = `file:${relativePath.replace(/\W/g, '_')}`;
     const fileId = this.toRecordId(fileIdStr);
     const repoRid = this.toRecordId(repoId);
+    
+    const stats = fs.statSync(filePath);
+    const mtime = stats.mtime.toISOString();
+    
+    // Get git hash from cache
+    let gitHash: string | undefined;
+    if (this.cachedGitHashes) {
+      gitHash = this.cachedGitHashes.get(relativePath);
+    }
 
     // Identify/Create Module
     const dirName = path.dirname(relativePath);
@@ -162,6 +174,8 @@ export class Indexer {
       line_count: lineCount,
       parse_status: parseStatus,
       last_parsed: new Date(),
+      mtime,
+      git_hash: gitHash,
     };
     if (moduleId) {
       fileData.module_id = moduleId;
@@ -218,7 +232,11 @@ export class Indexer {
     }
 
     for (const edge of result.edges) {
-      this.unresolvedEdges.push(edge);
+      const target = (edge.metadata?.targetName || edge.metadata?.source || edge.to) as string;
+      const key = `${edge.type}:${edge.from}:${target}`;
+      if (!this.unresolvedEdges.has(key)) {
+        this.unresolvedEdges.set(key, edge);
+      }
     }
   }
 
@@ -270,6 +288,53 @@ export class Indexer {
 
     console.log(`\n🚀 Indexing ${allFiles.length} files using ${this.concurrency} cores...`);
 
+    // --- Incremental Filtering ---
+    process.stdout.write('🔄 Checking for changes... ');
+    const existingFiles = await this.store.query<any>('SELECT path, content_hash, git_hash, mtime FROM file');
+    const existingMap = new Map<string, any>(existingFiles.map(f => [f.path, f]));
+    
+    this.cachedGitHashes = GitUtils.getGitHashes(this.repoPath);
+    const gitHashes = this.cachedGitHashes;
+
+    const filesToProcess = allFiles.filter(filePath => {
+      const relativePath = path.relative(this.repoPath, filePath);
+      const existing = existingMap.get(relativePath);
+      
+      if (!existing) return true; // New file
+
+      // Check Git hash (strongest)
+      const currentGitHash = gitHashes.get(relativePath);
+      if (currentGitHash && existing.git_hash && currentGitHash !== existing.git_hash) {
+        return true;
+      }
+
+      // Check mtime (fastest fallback)
+      try {
+        const stats = fs.statSync(filePath);
+        if (existing.mtime && stats.mtime.toISOString() !== existing.mtime) {
+          return true;
+        }
+      } catch (e) {
+        return true;
+      }
+
+      return false; // Skip
+    });
+
+    const skippedCount = allFiles.length - filesToProcess.length;
+    process.stdout.write(`done (${skippedCount} skipped).\n`);
+
+    if (filesToProcess.length === 0) {
+      console.log('✨ Everything is up to date.');
+      // Still need to handle Git history and edges if anything was pending, 
+      // but if 0 files changed, we can probably skip.
+      if (this.store instanceof SurrealStore) {
+        const git = new GitExtractor(this.repoPath);
+        await git.extractHistory(this.store);
+      }
+      return;
+    }
+
     let parsed = 0;
     let skipped = 0;
     let startTime = Date.now();
@@ -303,7 +368,7 @@ export class Indexer {
     })));
 
     // Task queue
-    const queue = [...allFiles];
+    const queue = [...filesToProcess];
     let active = 0;
     let dbQueue: Promise<any> = Promise.resolve();
 
@@ -321,7 +386,7 @@ export class Indexer {
         active++;
         
         const relativePath = path.relative(this.repoPath, filePath);
-        const percent = Math.round(((allFiles.length - queue.length) / allFiles.length) * 100);
+        const percent = Math.round(((filesToProcess.length - queue.length) / filesToProcess.length) * 100);
         process.stdout.write(`\r   [${percent}%] Processing: ${relativePath.padEnd(60).slice(0, 60)}...`);
 
         worker.postMessage({ type: 'extract', filePath, relativePath });
@@ -370,8 +435,8 @@ export class Indexer {
       }
     }
     
-    if (this.unresolvedEdges.length > 0) {
-      process.stdout.write(`\n🔄 Resolving ${this.unresolvedEdges.length} edges... `);
+    if (this.unresolvedEdges.size > 0) {
+      process.stdout.write(`\n🔄 Resolving ${this.unresolvedEdges.size} unique edges... `);
       await this.resolveEdges();
       console.log('done.');
     }
@@ -431,11 +496,10 @@ export class Indexer {
   }
 
   private async resolveEdges(): Promise<void> {
-    const total = this.unresolvedEdges.length;
+    const edges = Array.from(this.unresolvedEdges.values());
+    const total = edges.length;
     if (total === 0) return;
 
-    process.stdout.write(`\n🔄 Resolving ${total} edges... `);
-    
     // 1. Fetch all files to speed up relative import resolution
     const allFiles = await this.store.query<any>('SELECT id, path FROM file');
     const fileByPathMap = new Map<string, string>();
@@ -443,21 +507,61 @@ export class Indexer {
       fileByPathMap.set(f.path, f.id.toString());
     }
 
-    const CHUNK_SIZE = 1000;
-    let processed = 0;
-
     // Map to resolve ID back to path for relative imports
     const idToPathMap = new Map<string, string>();
     for (const [p, id] of fileByPathMap.entries()) {
       idToPathMap.set(id, p);
     }
 
+    const CHUNK_SIZE = 1000;
+    let processed = 0;
+
     for (let i = 0; i < total; i += CHUNK_SIZE) {
-      const chunk = this.unresolvedEdges.slice(i, i + CHUNK_SIZE);
+      const chunk = edges.slice(i, i + CHUNK_SIZE);
+      
+      // --- Batch Symbol Resolution ---
+      // Collect unique target names in this chunk that aren't in cache
+      const targetNames = new Set<string>();
+      for (const edge of chunk) {
+        if (['calls', 'inherits', 'implements'].includes(edge.type)) {
+          const name = edge.metadata?.targetName as string;
+          if (name && !this.symbolCache.has(name)) {
+            targetNames.add(name);
+          }
+        }
+      }
+
+      // Query for all missing target names at once
+      if (targetNames.size > 0) {
+        const namesArray = Array.from(targetNames);
+        // We use a simple SELECT with IN. To limit per-name, we'd need a more complex query,
+        // but for now, we'll fetch them all and limit in memory to avoid OOM.
+        const symbols = await this.store.query<any>(
+          'SELECT id, name FROM symbol WHERE name IN $names',
+          { names: namesArray }
+        );
+
+        // Group by name and populate cache
+        const tempMap = new Map<string, RecordId[]>();
+        for (const s of symbols) {
+          const list = tempMap.get(s.name) || [];
+          if (list.length < 5) { // Maintain the "LIMIT 5" behavior
+            list.push(this.toRecordId(s.id.toString()));
+            tempMap.set(s.name, list);
+          }
+        }
+        
+        // Ensure even "not found" names are cached as empty arrays to avoid re-querying
+        for (const name of namesArray) {
+          this.symbolCache.set(name, tempMap.get(name) || []);
+        }
+      }
+
+      // --- Build Batch RELATE Query ---
       const batchVars: Record<string, any> = {};
       let batchQuery = 'BEGIN TRANSACTION;\n';
+      let statementCount = 0;
       
-      // 2. Build RELATE statements with subqueries or direct IDs
       for (let j = 0; j < chunk.length; j++) {
         const edge = chunk[j];
         const fromId = this.toRecordId(edge.from);
@@ -467,17 +571,14 @@ export class Indexer {
           const targetName = edge.metadata?.targetName as string;
           if (!targetName) continue;
 
-          // Use subquery to resolve symbols on the server side with a limit
-          // This avoids fetching thousands of common symbols into Node.js memory (OOM fix)
-          const varName = `e_${j}`;
-          batchQuery += `
-            LET $targets = (SELECT id FROM symbol WHERE name = $${varName}_name LIMIT 5);
-            FOR $t IN $targets {
-              RELATE $${varName}_from->${edge.type}->$t;
-            };
-          `;
-          batchVars[`${varName}_from`] = fromId;
-          batchVars[`${varName}_name`] = targetName;
+          const targets = this.symbolCache.get(targetName) || [];
+          for (let k = 0; k < targets.length; k++) {
+            const varName = `e_${j}_${k}`;
+            batchQuery += `RELATE $${varName}_from->${edge.type}->$${varName}_to;\n`;
+            batchVars[`${varName}_from`] = fromId;
+            batchVars[`${varName}_to`] = targets[k];
+            statementCount++;
+          }
 
         } else if (edge.type === 'imports') {
           const source = edge.metadata?.source as string;
@@ -515,6 +616,7 @@ export class Indexer {
               batchQuery += `RELATE $${varName}_from->imports->$${varName}_to;\n`;
               batchVars[`${varName}_from`] = fromId;
               batchVars[`${varName}_to`] = this.toRecordId(targetId);
+              statementCount++;
             }
           } else {
             const modIdStr = `module:${source.replace(/\W/g, '_')}`;
@@ -528,12 +630,13 @@ export class Indexer {
             batchVars[`${varName}_mod`] = modId;
             batchVars[`${varName}_name`] = source;
             batchVars[`${varName}_from`] = fromId;
+            statementCount++;
           }
         }
       }
 
       batchQuery += 'COMMIT TRANSACTION;';
-      if (batchQuery !== 'BEGIN TRANSACTION;\nCOMMIT TRANSACTION;') {
+      if (statementCount > 0) {
         try {
           await this.store.batch(batchQuery, batchVars);
         } catch (e: any) {
@@ -545,11 +648,12 @@ export class Indexer {
       processed += chunk.length;
       if (i % (CHUNK_SIZE * 5) === 0 || processed === total) {
         const pct = Math.round((processed / total) * 100);
-        process.stdout.write(`\r🔄 Resolving ${total} edges... [${pct}%]`);
+        process.stdout.write(`\r🔄 Resolving ${total} unique edges... [${pct}%]`);
       }
     }
 
     process.stdout.write(' done.\n');
-    this.unresolvedEdges = [];
+    this.unresolvedEdges.clear();
+    this.symbolCache.clear();
   }
 }

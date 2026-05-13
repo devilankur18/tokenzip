@@ -41,6 +41,8 @@ DEFINE FIELD OVERWRITE parse_error ON file TYPE option<string>;
 DEFINE FIELD OVERWRITE last_parsed ON file TYPE datetime;
 DEFINE FIELD OVERWRITE git_last_modified ON file TYPE option<datetime>;
 DEFINE FIELD OVERWRITE git_blame_summary ON file TYPE option<object>;
+DEFINE FIELD OVERWRITE mtime ON file TYPE option<string>;
+DEFINE FIELD OVERWRITE git_hash ON file TYPE option<string>;
 
 DEFINE TABLE OVERWRITE symbol SCHEMALESS;
 DEFINE FIELD OVERWRITE type ON symbol TYPE string DEFAULT 'symbol';
