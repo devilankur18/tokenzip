@@ -1,6 +1,7 @@
 import { Command } from 'commander';
 import { SurrealStore } from '../../storage/surreal/store.js';
 import { resolveDbPath } from '../resolve-db.js';
+import { GitUtils } from '../../utils/git-utils.js';
 
 export const statsCommand = new Command('stats')
   .description('Show statistics about the knowledge graph')
@@ -11,7 +12,8 @@ export const statsCommand = new Command('stats')
     const store = new SurrealStore(dbPath);
     await store.initialize();
     
-    console.log(`\n📊 TokenZip Statistics: ${repoPath}`);
+    const repoName = GitUtils.getRepoName(repoPath);
+    console.log(`\n📊 TokenZip Statistics: ${repoName}`);
     const stats = await store.stats();
 
     console.log('\n--- Nodes ---');

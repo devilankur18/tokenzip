@@ -40,4 +40,23 @@ export class GitUtils {
       return false;
     }
   }
+
+  static getRepoName(repoPath: string): string {
+    try {
+      // 1. Try to get the name from the git remote origin
+      const originUrl = execSync('git remote get-url origin', { cwd: repoPath, encoding: 'utf8' }).trim();
+      // Match repo name from:
+      // https://github.com/user/repo.git
+      // git@github.com:user/repo.git
+      const match = originUrl.match(/\/([^/.]+)(\.git)?$/);
+      if (match && match[1]) {
+        return match[1];
+      }
+    } catch (e) {
+      // Not a git repo or no remote origin
+    }
+
+    // 2. Fallback: use the directory name of the repo root
+    return path.basename(repoPath);
+  }
 }

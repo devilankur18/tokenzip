@@ -268,7 +268,7 @@ export class Indexer {
     parser.setLanguage(Lang);
 
     console.log('\n📦 Initializing Repository...');
-    const repoName = path.basename(this.repoPath);
+    const repoName = GitUtils.getRepoName(this.repoPath);
     const repoId = `repository:${repoName.replace(/\W/g, '_')}`;
     await this.store.createNode({
       id: repoId,
