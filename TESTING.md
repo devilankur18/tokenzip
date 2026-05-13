@@ -14,65 +14,50 @@ npm test
 npm test src/engine/__tests__
 ```
 
-## 🚀 Integration Tests (Benchmark)
+## 🚀 Integration Tests & Benchmarks
 
 We maintain a high-fidelity integration test suite that benchmarks TokenZip against a real-world repository (**Express.js**). These tests verify the entire pipeline: indexing, edge resolution, and MCP tool execution.
 
-### Prerequisites
+### 📦 Unified Benchmark Environment
 
-- **Git**: Required to clone the benchmark repository.
-- **Internet Access**: Required for the first run to fetch the benchmark repo.
-- **Node.js >= 18**
+Both `npm test` and `npm run bench` share a unified infrastructure:
+- **Location**: `.bench/express` in the project root.
+- **Shared Setup**: Managed via `src/utils/test/bench-setup.ts`.
+- **Isolation**: Each run uses a local SurrealDB instance mapped to the benchmark repository.
 
 ### Running Integration Tests
-
-The integration suite is located in `src/mcp/__tests__/mcp-integration.test.ts`.
+The integration suite validates functional correctness and tool output consistency.
 
 ```bash
 # Run the integration suite
 npm test src/mcp/__tests__/mcp-integration.test.ts
 ```
 
-### How it works
-
-1.  **Isolation**: The test setup creates a `.test-bench/` directory in the project root.
-2.  **Benchmark Repo**: It clones `expressjs/express` and pins it to a stable commit.
-3.  **Clean DB**: Each test run uses an isolated SurrealDB instance on a predictable port (e.g., `40000`).
-4.  **Snapshots**: We use Vitest snapshots to ensure MCP tool outputs remain consistent and deterministic.
-
-## 📐 MCP Format Standardization
-
-To ensure TokenZip remains a first-class citizen in the MCP ecosystem, we have a specific suite for verifying JSON response formats.
+### Running Performance Benchmarks
+The benchmarking scripts measure token efficiency and E2E CLI performance.
 
 ```bash
-npm test src/mcp/__tests__/mcp-format.test.ts
+# Run all benchmarks (setup + savings + mcp)
+npm run bench
+
+# Run specific parts
+npm run bench:setup    # Prepare the benchmark repo
+npm run bench:savings  # Generate token savings report
+npm run bench:mcp      # E2E MCP validation via CLI stdio
 ```
 
 ## 🛠 Troubleshooting
 
 ### Database Locks
 If a test run crashes, a background `surreal` process might still be running and holding a lock on the database.
-- **Check logs**: View `.test-bench/express/.tokenzip/db/surreal.log` for error details.
+- **Check logs**: View `.bench/express/.tokenzip/db/surreal.log` for error details.
 - **Kill processes**: If you see "Address already in use" or "Database already locked", manually kill the `surreal` process:
   ```bash
   pkill surreal
   ```
 
 ### Resetting the Benchmark
-If the benchmark repository or database becomes corrupted, simply delete the `.test-bench` directory:
+If the benchmark repository or database becomes corrupted, simply delete the `.bench` directory:
 ```bash
-rm -rf .test-bench
-```
-
-## 📊 Benchmarking Tools
-
-We also provide CLI-based benchmarking scripts for measuring token savings:
-
-```bash
-# Run all benchmarks (setup + savings + mcp)
-npm run bench
-
-# Run specific benchmarks
-npm run bench:savings
-npm run bench:mcp
+rm -rf .bench
 ```

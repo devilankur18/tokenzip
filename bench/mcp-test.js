@@ -19,7 +19,7 @@ import { parseArgs } from 'util';
 import { existsSync } from 'fs';
 
 const { values: args } = parseArgs({
-  options: { cwd: { type: 'string', default: process.cwd() } }
+  options: { cwd: { type: 'string', default: resolve(process.cwd(), './.bench/express') } }
 });
 
 const BENCH_REPO = resolve(args.cwd);

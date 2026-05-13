@@ -14,5 +14,6 @@ db/
 data/
 .tokenzip/*
 
-.test-bench/*
+.test-bench/
+.bench/
 test-bench-repo/

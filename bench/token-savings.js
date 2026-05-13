@@ -16,7 +16,7 @@ import { join, resolve, dirname } from 'path';
 import { parseArgs } from 'util';
 
 const { values: args } = parseArgs({
-  options: { cwd: { type: 'string', default: '/tmp/express-bench' } }
+  options: { cwd: { type: 'string', default: './.bench/express' } }
 });
 
 const BENCH_REPO = resolve(args.cwd);

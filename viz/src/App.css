@@ -60,6 +60,31 @@ body {
   margin-bottom: 16px;
 }
 
+.project-info {
+  margin-bottom: 20px;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.project-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.project-path {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+  font-family: 'JetBrains Mono', monospace;
+  word-break: break-all;
+  line-height: 1.4;
+}
+
 .logo-section {
   display: flex;
   align-items: center;
@@ -108,27 +133,22 @@ body {
 
 .search-icon {
   position: absolute;
-  left: 12px;
-  top: 50%;
-  transform: translateY(-50%);
-  color: var(--text-muted);
 }
 
-.search-input {
-  width: 100%;
-  background: rgba(0, 0, 0, 0.2);
+.search-input-wrapper {
+  display: flex;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.05);
   border: 1px solid var(--border-color);
   border-radius: 8px;
-  padding: 10px 12px 10px 40px;
-  color: white;
-  font-size: 0.9rem;
-  transition: all 0.2s;
+  padding: 8px 12px;
+  gap: 10px;
+  transition: all 0.2s ease;
 }
 
-.search-input:focus {
-  outline: none;
+.search-input-wrapper:focus-within {
   border-color: var(--accent-primary);
-  background: rgba(0, 0, 0, 0.4);
+  background: rgba(255, 255, 255, 0.08);
   box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
 }
 

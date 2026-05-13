@@ -41,6 +41,8 @@ const App: React.FC = () => {
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
+  const [repoInfo, setRepoInfo] = useState<{ name: string; path: string } | null>(null);
+  const [isSearching, setIsSearching] = useState(false);
   const fgRef = useRef<any>();
 
   const urlParams = new URLSearchParams(window.location.search);
@@ -52,7 +54,7 @@ const App: React.FC = () => {
       try {
         await surreal.connect(`http://127.0.0.1:${dbPort}`);
         await surreal.signin({ username: 'root', password: 'root' });
-        await surreal.use({ namespace: 'tokenzip', database: 'graph' });
+        await surreal.use({ ns: 'tokenzip', db: 'graph' });
         setDb(surreal);
         (window as any).db = surreal;
         fetchData(surreal);
@@ -68,21 +70,30 @@ const App: React.FC = () => {
   const fetchData = async (surreal: Surreal) => {
     try {
       // Increase limits to handle medium-sized codebases better
-      const nodeRes = await surreal.query<any[][]>('SELECT * FROM symbol, file LIMIT 5000');
-      const nodes: Node[] = (nodeRes[0] || []).map((n: any) => ({
-        id: n.id.toString(),
-        type: n.type || (n.id.toString().startsWith('file:') ? 'file' : 'symbol'),
-        name: n.name || n.id.toString().split(':')[1] || n.id.toString(),
-        path: n.path,
-        signature: n.signature,
-        docs: n.doc,
-        val: n.id.toString().startsWith('file:') ? 8 : 3,
-        color: n.id.toString().startsWith('file:') ? '#6366f1' : '#a855f7'
-      }));
+      // Fetch files and symbols separately to ensure we get both in large repos
+      const fileRes = await surreal.query<any[][]>('SELECT * FROM file LIMIT 2000');
+      const symbolRes = await surreal.query<any[][]>('SELECT * FROM symbol LIMIT 8000');
+      
+      const rawNodes = [...(fileRes[0] || []), ...(symbolRes[0] || [])];
+      
+      const nodes: Node[] = rawNodes.map((n: any) => {
+        const idStr = n.id.toString();
+        const isFile = idStr.startsWith('file:');
+        return {
+          id: idStr,
+          type: n.type || (isFile ? 'file' : 'symbol'),
+          name: n.name || idStr.split(':')[1] || idStr,
+          path: n.path,
+          signature: n.signature,
+          docs: n.doc,
+          val: isFile ? 8 : 3,
+          color: isFile ? '#6366f1' : '#a855f7'
+        };
+      });
 
       const nodeIds = new Set(nodes.map(n => n.id));
 
-      const edgeRes = await surreal.query<any[][]>('SELECT *, in as target, out as source FROM contains, imports, exports, calls, implements, inherits, modifies, reads, references, depends_on LIMIT 10000');
+      const edgeRes = await surreal.query<any[][]>('SELECT *, in as source, out as target FROM contains, imports, exports, calls, implements, inherits, modifies, reads, references, depends_on LIMIT 30000');
       const links: Edge[] = (edgeRes[0] || [])
         .map((e: any) => ({
           id: e.id.toString(),
@@ -91,6 +102,11 @@ const App: React.FC = () => {
           type: e.type || e.id.toString().split(':')[0]
         }))
         .filter(l => nodeIds.has(l.source) && nodeIds.has(l.target));
+
+      const repoRes = await surreal.query<any[][]>('SELECT name, path FROM repository LIMIT 1');
+      if (repoRes[0]?.[0]) {
+        setRepoInfo(repoRes[0][0]);
+      }
 
       setGraphData({ nodes, links });
       setLoading(false);
@@ -112,13 +128,13 @@ const App: React.FC = () => {
     if (searchTimeout.current) clearTimeout(searchTimeout.current);
 
     searchTimeout.current = setTimeout(async () => {
+      setIsSearching(true);
       try {
         const query = searchTerm.toLowerCase();
         const res = await db.query(
           'SELECT * FROM symbol WHERE string::lowercase(name) CONTAINS $q LIMIT 10; SELECT * FROM file WHERE string::lowercase(path) CONTAINS $q LIMIT 10;',
           { q: query }
         );
-        console.log('SEARCH_RES:', res);
         
         const getResult = (r: any) => Array.isArray(r) ? r : (r?.result || []);
 
@@ -143,11 +159,35 @@ const App: React.FC = () => {
         setSearchResults([...symbols, ...files].slice(0, 10));
       } catch (err) {
         console.error('Search error:', err);
+      } finally {
+        setIsSearching(false);
       }
     }, 300);
 
     return () => clearTimeout(searchTimeout.current);
   }, [searchTerm, db]);
+
+  const handleSelectSearchResult = (node: Node) => {
+    // Add to graph if not present
+    if (!graphData.nodes.find(n => n.id === node.id)) {
+      setGraphData(prev => ({
+        ...prev,
+        nodes: [...prev.nodes, node]
+      }));
+    }
+    setSelectedNode(node);
+    setSearchTerm('');
+    setSearchResults([]);
+    
+    // Center view on node
+    setTimeout(() => {
+      if (fgRef.current) {
+        const n = graphData.nodes.find(gn => gn.id === node.id) || node;
+        fgRef.current.centerAt((n as any).x || 0, (n as any).y || 0, 1000);
+        fgRef.current.zoom(2, 1000);
+      }
+    }, 100);
+  };
 
   const [edgeCounts, setEdgeCounts] = useState<{ in: number, out: number }>({ in: 0, out: 0 });
 
@@ -288,6 +328,12 @@ const App: React.FC = () => {
                   <Activity className="logo-icon" size={24} />
                   <div className="logo-text">TokenZip<span>Viz</span></div>
                 </div>
+                {repoInfo && (
+                  <div className="project-info">
+                    <div className="project-name">{repoInfo.name}</div>
+                    <div className="project-path">{repoInfo.path}</div>
+                  </div>
+                )}
                 <div className="status-badge">
                   <div className="status-dot"></div>
                   {dbPort}
@@ -295,33 +341,37 @@ const App: React.FC = () => {
               </div>
               
               <div className="search-container">
-                <Search className="search-icon" size={18} />
-                <input 
-                  type="text" 
-                  placeholder="Search repository..." 
-                  className="search-input"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
-              </div>
-
-              {searchTerm && (
-                <div className="search-results-floating">
-                  {searchResults.length > 0 ? (
-                    searchResults.map(n => (
-                      <div key={n.id} className="search-result-card" onClick={() => handleNodeClick(n)}>
-                        <div className={`type-tag tag-${n.type}`}>{n.type}</div>
+                <div className="search-input-wrapper">
+                  <Search className="search-icon" size={18} />
+                  <input
+                    type="text"
+                    placeholder="Search repository (symbols, files)..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                  />
+                  {isSearching && <div className="search-spinner"></div>}
+                </div>
+                
+                {searchResults.length > 0 && (
+                  <div className="search-results glass-panel">
+                    {searchResults.map(result => (
+                      <div 
+                        key={result.id} 
+                        className="search-result-item"
+                        onClick={() => handleSelectSearchResult(result)}
+                      >
+                        <div className={`result-icon ${result.type}`}>
+                          {result.type === 'file' ? <FileCode size={14} /> : <Zap size={14} />}
+                        </div>
                         <div className="result-info">
-                          <div className="result-name">{n.name}</div>
-                          {n.path && <div className="result-path">{n.path}</div>}
+                          <div className="result-name">{result.name}</div>
+                          {result.path && <div className="result-path">{result.path}</div>}
                         </div>
                       </div>
-                    ))
-                  ) : (
-                    <div className="no-results">No matches found in knowledge graph</div>
-                  )}
-                </div>
-              )}
+                    ))}
+                  </div>
+                )}
+              </div>
 
               <div className="legend-section">
                 <h4>GRAPH LEGEND</h4>

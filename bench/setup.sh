@@ -3,7 +3,7 @@
 set -e
 
 CLI="node ./dist/cli/index.js"
-BENCH_REPO="/tmp/express-bench"
+BENCH_REPO="./.bench/express"
 
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "  TokenZip Benchmark Setup"
