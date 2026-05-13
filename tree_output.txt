@@ -1,0 +1,397 @@
+
+🚀 Invoking tool: query_repo_structure
+📦 Arguments: {
+  "adaptive": "true",
+  "format": "tree",
+  "depth": "2"
+}
+---
+🏠 tokenzip
+├── 📦 cli
+│   ├── 📄 index.ts
+│   │   ├── 𝑓 callback_program
+  .name('tokenzip')
+  .description(
+    'TokenZip v2 — Transform any codebase into a queryable knowledge graph.\n' +
+    'Search symbols, trace call stacks, and expose your repo to AI copilots via MCP.\n\n' +
+    'Quick start:\n' +
+    '  tokenzip init      Initialize in current directory\n' +
+    '  tokenzip parse     Index the codebase\n' +
+    '  tokenzip search    Search for any symbol\n' +
+    '  tokenzip mcp       Directly test MCP tools\n' +
+    '  tokenzip serve     Start the MCP server for AI copilots'
+  )
+  .version('2.0.0')
+  .option('--cwd <dir>', 'Working directory', process.env.TOKENZIP_CWD || process.cwd())
+  .hook
+│   │   └── 𝑥 program
+│   └── 📄 resolve-db.ts
+│       └── 𝑓 resolveDbPath
+├── 📦 mcp
+│   ├── 📄 server.ts
+│   │   ├── 𝑓 callback_server.setRequestHandler
+│   │   ├── 𝑓 callback_server.setRequestHandler
+│   │   └── 𝑓 createMcpServer
+│   ├── 📄 token-budget.ts
+│   │   ├── 𝑓 constructor
+│   │   ├── 𝑓 estimate
+│   │   ├── 𝑓 getArrays
+│   │   ├── 𝑓 smartTruncate
+│   │   ├── 🏛️ TokenBudgetManager
+│   │   └── 𝑓 truncate
+│   └── 📄 usage-tracker.ts
+│       ├── 𝑓 constructor
+│       ├── 𝑓 getSummary
+│       ├── 𝑓 log
+│       └── 🏛️ UsageTracker
+├── 📦 src
+│   └── 📄 index.ts
+├── 📦 src
+│   └── 📄 index.ts
+├── 📂 bench
+│   ├── 📄 mcp-test.js
+│   │   ├── 𝑥 { values: args }
+│   │   ├── 𝑓 B
+│   │   ├── 𝑥 BENCH_REPO
+│   │   ├── 𝑓 callback_proc.stderr.on
+│   │   ├── 𝑓 callback_proc.stdout.on
+│   │   ├── 𝑓 callback_proc.stdout.on
+│   │   ├── 𝑓 callTool
+│   │   ├── 𝑥 CLI_PATH
+│   │   ├── 𝑓 close
+│   │   ├── 𝑓 constructor
+│   │   ├── 𝑓 DIM
+│   │   ├── 𝑓 G
+│   │   ├── 𝑓 initialize
+│   │   ├── 𝑓 listTools
+│   │   ├── 🏛️ McpClient
+│   │   ├── 𝑓 R
+│   │   ├── 𝑓 runTests
+│   │   ├── 𝑓 send
+│   │   ├── 𝑓 test
+│   │   ├── 𝑥 TOKEN_BUDGET
+│   │   ├── 𝑓 W
+│   │   └── 𝑓 Y
+│   └── 📄 token-savings.js
+│       ├── 𝑥 { values: args }
+│       ├── 𝑓 B
+│       ├── 𝑥 BENCH_REPO
+│       ├── 𝑓 callback_results.filter(r => r.mode === 'implementation_of').map
+│       ├── 𝑥 CHARS_PER_TOKEN
+│       ├── 𝑥 cmd
+│       ├── 𝑥 COL
+│       ├── 𝑥 color
+│       ├── 𝑓 DIM
+│       ├── 𝑥 fullPath
+│       ├── 𝑓 G
+│       ├── 𝑓 getAllFiles
+│       ├── 𝑥 indexer
+│       ├── 𝑓 log
+│       ├── 𝑥 LOG_FILE
+│       ├── 𝑥 modes
+│       ├── 𝑥 naiveChars
+│       ├── 𝑥 naiveTok
+│       ├── 𝑓 naiveTokens
+│       ├── 𝑓 pad
+│       ├── 𝑓 padL
+│       ├── 𝑥 pct
+│       ├── 𝑓 R
+│       ├── 𝑓 readCodeRange
+│       ├── 𝑓 readFileChars
+│       ├── 𝑥 results
+│       ├── 𝑓 row
+│       ├── 𝑓 savings
+│       ├── 𝑥 store
+│       ├── 𝑥 testFiles
+│       ├── 𝑓 tokenzipSearch
+│       ├── 𝑥 totalNaive
+│       ├── 𝑥 totalPct
+│       ├── 𝑥 totalSmart
+│       ├── 𝑥 tzOut
+│       ├── 𝑓 tzSmartRead
+│       ├── 𝑥 tzTok
+│       ├── 𝑓 W
+│       ├── 𝑓 walk
+│       └── 𝑓 Y
+├── 📂 code
+│   └── 📄 typescript.ts
+│       ├── 𝑓 calculateInternal
+│       ├── 𝑓 callback_['serve', 'addListener', 'on', 'test', 'describe', 'it', 'app.', 'router.'].some
+│       ├── 𝑓 extract
+│       ├── 𝑓 extractCalls
+│       ├── 𝑓 extractVariables
+│       ├── 𝑓 findTopLevelIIFE
+│       ├── 𝑓 getSignature
+│       ├── 𝑓 isExported
+│       ├── 𝑓 isInsideFunction
+│       ├── 𝑓 isNestedDeeperThan
+│       ├── 𝑓 isNodeInside
+│       └── 🏛️ TypeScriptExtractor
+├── 📂 commands (contains 12 files)
+│   └── 📁 ... (+12 more files)
+├── 📂 engine
+│   ├── 📄 indexer.ts
+│   │   ├── 𝑓 callback_allFiles.filter
+│   │   ├── 𝑓 callback_content
+        .split('\n')
+        .map
+│   │   ├── 𝑓 callback_content
+        .split('\n')
+        .map(line => line.trim())
+        .filter
+│   │   ├── 𝑓 callback_dbQueue.then
+│   │   ├── 𝑓 callback_files.forEach
+│   │   ├── 𝑓 callback_this.options.types.map
+│   │   ├── 𝑓 callback_w.once
+│   │   ├── 𝑓 callback_worker.once
+│   │   ├── 𝑓 constructor
+│   │   ├── 𝑓 getAllFiles
+│   │   ├── 𝑥 IGNORE_DIRS
+│   │   ├── 𝑓 indexCodebase
+│   │   ├── 🏛️ Indexer
+│   │   ├── 🔷 IndexerOptions
+│   │   ├── 𝑓 isIgnored
+│   │   ├── 𝑓 loadGitIgnore
+│   │   ├── 𝑓 next
+│   │   ├── 𝑓 processQueue
+│   │   ├── 𝑓 resolveEdges
+│   │   ├── 𝑓 saveResult
+│   │   ├── 𝑥 SUPPORTED_EXTS
+│   │   └── 𝑓 toRecordId
+│   ├── 📄 report-generator.ts
+│   │   ├── 𝑓 callback_Object.entries(folders).map
+│   │   ├── 𝑓 constructor
+│   │   ├── 🔷 FileMetric
+│   │   ├── 𝑓 generateCSV
+│   │   ├── 𝑓 generateMarkdown
+│   │   ├── 𝑓 getPercentile
+│   │   └── 🏛️ ReportGenerator
+│   ├── 📄 report-indexer.ts
+│   │   ├── 𝑓 callback_chunk.map
+│   │   ├── 𝑓 callback_chunkBatch.map
+│   │   ├── 𝑓 callback_this.options.types.map
+│   │   ├── 𝑓 constructor
+│   │   ├── 𝑓 getMetrics
+│   │   ├── 🏛️ ReportIndexer
+│   │   └── 🔷 ReportOptions
+│   └── 📄 worker.ts
+│       ├── 𝑓 callback_parentPort.on
+│       ├── 𝑓 estimate
+│       ├── 𝑓 init
+│       ├── 𝑥 languageLoaded
+│       ├── 𝑥 parser
+│       ├── 𝑥 registry
+│       └── 🏛️ TokenBudgetManager
+├── 📂 extractor
+│   ├── 📄 base-extractor.ts
+│   │   ├── 𝑓 extractDocstring
+│   │   ├── 𝑓 generateFileId
+│   │   ├── 𝑓 generateSymbolId
+│   │   ├── 𝑓 hashPath
+│   │   ├── 𝑓 postProcess
+│   │   ├── 𝑓 runQuery
+│   │   └── 𝑓 walk
+│   ├── 📄 git.ts
+│   │   ├── 𝑓 callback_show.trim().split('\n').filter
+│   │   ├── 𝑓 callback_store.createNode({
+          id: commitId,
+          type: 'commit',
+          hash: entry.hash,
+          short_hash: shortHash,
+          author: entry.author_name,
+          email: entry.author_email ?? null,
+          date: commitDate,
+          message: entry.message,
+        } as any).catch
+│   │   ├── 𝑓 callback_store.query(
+            `RELATE ${fileId}->modified_in->${commitId}`,
+            {}
+          ).catch
+│   │   ├── 𝑓 constructor
+│   │   ├── 𝑓 extractHistory
+│   │   └── 🏛️ GitExtractor
+│   ├── 📄 registry.ts
+│   │   ├── 𝑓 constructor
+│   │   ├── 🏛️ ExtractorRegistry
+│   │   ├── 𝑓 getExtension
+│   │   ├── 𝑓 getExtractor
+│   │   ├── 𝑓 register
+│   │   └── 𝑓 supportsFile
+│   └── 📄 types.ts
+│       ├── 🔷 EdgeIR
+│       ├── 🔷 ExtractionResult
+│       ├── 🔷 ExtractorContext
+│       ├── 🔷 ParseError
+│       └── 🔷 SymbolIR
+├── 📂 query
+│   ├── 📄 builder.ts
+│   │   └── 𝑓 createQuery
+│   └── 📄 scope-base.ts
+│       ├── 𝑓 constructor
+│       ├── 𝑓 contains
+│       ├── 𝑓 count
+│       ├── 𝑓 eq
+│       ├── 𝑓 exists
+│       ├── 𝑓 filter
+│       ├── 🔷 FilterPredicate
+│       ├── 𝑓 in
+│       ├── 𝑓 limit
+│       ├── 𝑓 matches
+│       ├── 𝑓 neq
+│       ├── 𝑓 offset
+│       ├── 𝑓 sort
+│       ├── 🔷 SortDirection
+│       ├── 🔷 TerminalFormat
+│       ├── 𝑓 toArray
+│       ├── 𝑓 toGraph
+│       └── 𝑓 toJSON
+├── 📂 scopes
+│   ├── 📄 file-scope.ts
+│   │   ├── 𝑓 clone
+│   │   ├── 𝑓 constructor
+│   │   ├── 𝑓 execute
+│   │   ├── 🏛️ FileScope
+│   │   └── 𝑓 symbols
+│   ├── 📄 module-scope.ts
+│   │   ├── 𝑓 clone
+│   │   ├── 𝑓 constructor
+│   │   ├── 𝑓 execute
+│   │   ├── 𝑓 files
+│   │   └── 🏛️ ModuleScope
+│   ├── 📄 repo-scope.ts
+│   │   ├── 𝑓 clone
+│   │   ├── 𝑓 execute
+│   │   ├── 🏛️ RepoScope
+│   │   ├── 𝑓 symbol
+│   │   └── 𝑓 symbols
+│   └── 📄 symbol-scope.ts
+│       ├── 𝑓 clone
+│       ├── 𝑓 constructor
+│       ├── 𝑓 execute
+│       └── 🏛️ SymbolScope
+├── 📂 scratch (contains 10 files)
+│   └── 📁 ... (+10 more files)
+├── 📂 storage
+│   └── 📄 interface.ts
+│       └── 🔷 IStore
+├── 📂 surreal
+│   ├── 📄 migrations.ts
+│   │   └── 𝑥 SCHEMA_DEFINITION
+│   └── 📄 store.ts
+│       ├── 𝑓 batch
+│       ├── 𝑓 batchUpsert
+│       ├── 𝑓 callback_process.on
+│       ├── 𝑓 callback_process.on
+│       ├── 𝑓 callback_process.on
+│       ├── 𝑓 callback_socket.on
+│       ├── 𝑓 callback_socket.on
+│       ├── 𝑓 cleanup
+│       ├── 𝑓 clear
+│       ├── 𝑓 close
+│       ├── 𝑓 constructor
+│       ├── 𝑓 createEdge
+│       ├── 𝑓 createEdges
+│       ├── 𝑓 createNode
+│       ├── 𝑓 createNodes
+│       ├── 𝑓 deleteEdges
+│       ├── 𝑓 deleteNode
+│       ├── 𝑓 deleteNodes
+│       ├── 𝑓 getDeterministicPort
+│       ├── 𝑓 getEdges
+│       ├── 𝑓 getEdgesTo
+│       ├── 𝑓 getNode
+│       ├── 𝑓 getNodes
+│       ├── 𝑓 graphTraversal
+│       ├── 𝑓 initialize
+│       ├── 𝑓 isPortOpen
+│       ├── 𝑓 isProcessRunning
+│       ├── 𝑓 migrate
+│       ├── 𝑓 query
+│       ├── 𝑓 searchNodes
+│       ├── 𝑓 startBackgroundServer
+│       ├── 𝑓 stats
+│       ├── 🏛️ SurrealStore
+│       ├── 𝑓 transaction
+│       └── 𝑓 updateNode
+├── 📂 tools (contains 9 files)
+│   └── 📁 ... (+9 more files)
+├── 📂 types
+│   └── 📄 graph.ts
+│       ├── 🔷 GraphEdge
+│       ├── 🔷 GraphNode
+│       ├── 🔷 GraphResult
+│       └── 🔷 StoreStats
+├── 📂 utils
+│   ├── 📄 code-reader.ts
+│   │   ├── 🔷 CodeRange
+│   │   └── 𝑓 readCodeRange
+│   ├── 📄 file-cache.ts
+│   │   ├── 𝑓 constructor
+│   │   ├── 𝑥 fileCache
+│   │   ├── 🏛️ FileLineCache
+│   │   ├── 𝑓 getLines
+│   │   └── 𝑓 getRange
+│   ├── 📄 git-utils.ts
+│   │   ├── 𝑓 getGitHashes
+│   │   ├── 𝑓 getRepoName
+│   │   ├── 🔷 GitFileMetadata
+│   │   ├── 🏛️ GitUtils
+│   │   └── 𝑓 isGitRepo
+│   ├── 📄 hash.ts
+│   │   └── 𝑓 contentHash
+│   └── 📄 string-utils.ts
+│       ├── 𝑓 findClosestMatch
+│       └── 𝑓 levenshteinDistance
+├── 📄 debug-parse.cjs
+│   ├── 𝑓 dump
+│   ├── 𝑥 Parser
+│   └── 𝑓 test
+├── 📄 parser.mjs
+│   ├── 𝑥 EXTENSIONS
+│   ├── 𝑓 extractFunction
+│   ├── 𝑓 extractHook
+│   ├── 𝑓 extractImport
+│   ├── 𝑓 extractSupabase
+│   ├── 𝑥 IGNORE_DIRS
+│   ├── 𝑥 Lang
+│   ├── 𝑥 output
+│   ├── 𝑓 parseFile
+│   ├── 𝑥 parser
+│   ├── 𝑥 results
+│   ├── 𝑥 ROOT
+│   ├── 𝑓 text
+│   ├── 𝑓 traverse
+│   └── 𝑓 walk
+├── 📄 proof.js
+│   ├── 𝑥 allFiles
+│   ├── 𝑥 indexer
+│   ├── 𝑥 repoPath
+│   ├── 𝑥 result
+│   ├── 𝑥 store
+│   └── 𝑥 target
+├── 📄 test-conn.js
+│   ├── 𝑥 conn
+│   ├── 𝑥 dbPath
+│   └── 𝑥 store
+├── 📄 tokenzip-poc.js
+│   ├── 𝑓 callback_files.forEach
+│   ├── 𝑓 callback_gitLogs.forEach
+│   ├── 𝑓 callback_stdout.split('\n').filter
+│   ├── 𝑓 callback_stdout.split('\n').filter(l => /^[a-f0-9]{7,} /.test(l)).map
+│   ├── 𝑥 db
+│   ├── 𝑥 EXTENSIONS
+│   ├── 𝑓 extractDirectCalls
+│   ├── 𝑓 getAllFiles
+│   ├── 𝑥 IGNORE_DIRS
+│   ├── 𝑓 indexCodebase
+│   ├── 𝑓 main
+│   ├── 𝑥 MODE
+│   ├── 𝑥 QUERY
+│   ├── 𝑥 ROOT
+│   ├── 𝑓 searchMetadata
+│   ├── 𝑥 TS_WASM_PATH
+│   ├── 𝑓 walk
+│   └── 𝑓 walkAST
+├── 📄 tsup.config.ts
+└── 📄 vitest.config.ts
+
