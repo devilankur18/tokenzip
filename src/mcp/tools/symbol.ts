@@ -29,10 +29,13 @@ export function createSymbolTools(store: IStore, repoPath: string, budget: Token
           return {
             content: [{ 
               type: 'text', 
-              text: `Multiple symbols found for '${args.symbol_name}'. Please specify symbol_id in your next call:\n${JSON.stringify(candidates, null, 2)}` 
+              text: JSON.stringify({
+                error: `Multiple symbols found for '${args.symbol_name}'.`,
+                message: "Please specify symbol_id in your next call.",
+                candidates
+              }, null, 2)
             }],
-            isError: true,
-            candidates
+            isError: true
           };
         }
 

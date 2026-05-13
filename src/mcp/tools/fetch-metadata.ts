@@ -1,7 +1,8 @@
 import { IStore } from '../../storage/interface.js';
 import { StringRecordId } from 'surrealdb';
+import { TokenBudgetManager } from '../token-budget.js';
 
-export function createFetchMetadataTools(store: IStore) {
+export function createFetchMetadataTools(store: IStore, budget: TokenBudgetManager) {
   return [
     {
       name: 'fetch_symbol_metadata',
@@ -32,9 +33,13 @@ export function createFetchMetadataTools(store: IStore) {
           }
         }
 
+        const response = budget.truncate({
+          count: results.length,
+          symbols: results
+        });
+
         return {
-          content: [{ type: 'text', text: JSON.stringify(results, null, 2) }],
-          count: results.length
+          content: [{ type: 'text', text: JSON.stringify(response, null, 2) }]
         };
       }
     }

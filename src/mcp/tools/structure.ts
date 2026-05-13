@@ -450,8 +450,9 @@ export function createStructureTools(store: IStore, repoPath: string, budget: To
       },
       handler: async () => {
         const stats = await store.stats();
+        const response = budget.truncate(stats);
         return {
-          content: [{ type: 'text', text: JSON.stringify(stats, null, 2) }],
+          content: [{ type: 'text', text: JSON.stringify(response, null, 2) }],
         };
       },
     },

@@ -14,6 +14,12 @@ export function createAnalyticsTools(tracker: UsageTracker) {
       handler: async (args: any) => {
         const stats = await tracker.getSummary();
         
+        if (args.format === 'detailed') {
+          return {
+            content: [{ type: 'text', text: JSON.stringify(stats, null, 2) }],
+          };
+        }
+
         const text = [
           `📊 **TokenZip ROI Dashboard**`,
           `---------------------------`,

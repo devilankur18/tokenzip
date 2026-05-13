@@ -17,7 +17,7 @@ export function registerTools(store: IStore, repoPath: string, budget: TokenBudg
   tools.push(...createStructureTools(store, repoPath, budget));
   tools.push(...createSymbolTools(store, repoPath, budget));
   tools.push(...createSmartFileReadTools(store, repoPath, budget));
-  tools.push(...createFetchMetadataTools(store));
+  tools.push(...createFetchMetadataTools(store, budget));
   tools.push(...createSearchTools(store, repoPath, budget));
   tools.push(...createNavigationTools(store, repoPath, budget));
   tools.push(...createContextTools(store, repoPath, budget));
@@ -29,7 +29,18 @@ export function registerTools(store: IStore, repoPath: string, budget: TokenBudg
       const result = await tool.handler(args);
       // Log usage if it's a successful text response
       if (!result.isError && result.content && result.content[0]?.type === 'text') {
-        const filePath = args.path || args.filePath || (result as any).filePath;
+        let filePath = args.path || args.filePath || args.file_path;
+        
+        // Try to extract path from JSON response if not in args
+        if (!filePath) {
+          try {
+            const data = JSON.parse(result.content[0].text);
+            filePath = data.path || data.filePath || (data.target && data.target.filePath);
+          } catch (e) {
+            // Not JSON or no path found, ignore
+          }
+        }
+        
         await tracker.log(tool.name, result.content[0].text, filePath);
       }
       return result;

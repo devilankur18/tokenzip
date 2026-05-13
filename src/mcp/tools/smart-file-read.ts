@@ -87,12 +87,15 @@ export function createSmartFileReadTools(store: IStore, repoPath: string, budget
           };
         }
 
-        return {
-          content: [{ type: 'text', text: result.content }],
+        const response = budget.truncate({
+          content: result.content,
           mode_used: result.mode_used,
-          token_count: budget.estimate(result.content),
           symbol_count: result.symbol_count,
           warnings: result.warnings || []
+        });
+
+        return {
+          content: [{ type: 'text', text: JSON.stringify(response, null, 2) }]
         };
       }
     }
