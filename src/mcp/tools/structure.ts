@@ -349,9 +349,9 @@ export function createStructureTools(store: IStore, repoPath: string, budget: To
       }
     },
     {
-      name: 'query_repo_structure',
+      name: 'get_code_overview',
+      description: 'Get a semantic, hierarchical overview of the repository (Modules -> Files -> Exports). Use this to understand architectural boundaries.',
 
-      description: 'Get a hierarchical overview of the repository (Modules -> Files -> Symbols).',
       inputSchema: {
         type: 'object',
         properties: {
@@ -372,10 +372,30 @@ export function createStructureTools(store: IStore, repoPath: string, budget: To
           return { content: [{ type: 'text', text: err.message }], isError: true };
         }
       },
-
-
-
     },
+
+    {
+
+
+      name: 'query_repo_structure',
+      description: 'Alias for get_code_overview. (Deprecated)',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          path: { type: 'string' },
+          depth: { type: 'number', default: 2 },
+          format: { type: 'string', enum: ['json', 'tree', 'markdown'], default: 'tree' }
+        }
+      },
+      handler: async (args: any) => {
+        try {
+          return await executeStructureQuery(store, budget, args);
+        } catch (err: any) {
+          return { content: [{ type: 'text', text: err.message }], isError: true };
+        }
+      },
+    },
+
     {
       name: 'get_codebase_stats',
       description: 'Get high-level statistics about the codebase (file count, symbol count, etc.).',
