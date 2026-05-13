@@ -196,8 +196,10 @@ async function executeStructureQuery(store: IStore, budget: TokenBudgetManager, 
 
   const allNodes = (await store.query<any[]>(`SELECT * FROM $ids`, { ids: idsAsRecords })) || [];
   
-  // Build the tree in memory
+  // 1. Build the node map and identify the root
   const nodeMap = new Map<string, any>();
+  let rootNode: any = null;
+
   for (const node of allNodes) {
     if (!node || !node.id) continue;
     const id = node.id.toString();
@@ -207,24 +209,73 @@ async function executeStructureQuery(store: IStore, budget: TokenBudgetManager, 
       name = node.path.split('/').pop() || node.path;
     }
 
-    nodeMap.set(id, {
+    const entry = {
       id: id,
       name: name,
       type: node.type,
       path: node.path,
       kind: node.kind,
       isExported: node.isExported,
-      children: []
-    });
+      children: [] as any[],
+      stats: { files: 0, modules: 0, symbols: 0 }
+    };
+
+    nodeMap.set(id, entry);
+    if (node.type === 'repository') rootNode = entry;
   }
 
-  const typeRank: Record<string, number> = {
-    'repository': 1,
-    'module': 2,
-    'file': 3,
-    'symbol': 4
-  };
+  if (!rootNode) throw new Error('Repository root not found.');
 
+  // 2. Reconstruct Hierarchy from Paths (for Files and Modules)
+  // This ensures physical directory nesting is preserved regardless of DB edge flattening
+  const pathToNode = new Map<string, any>();
+  const nodesWithPaths = Array.from(nodeMap.values()).filter(n => n.path && (n.type === 'file' || n.type === 'module' || n.type === 'package'));
+  
+  for (const node of nodesWithPaths) {
+    pathToNode.set(node.path, node);
+  }
+
+  for (const node of nodesWithPaths) {
+    const parts = node.path.split('/');
+    if (parts.length > 1) {
+      const parentPath = parts.slice(0, -1).join('/');
+      let parent = pathToNode.get(parentPath);
+      
+      // If parent doesn't exist (virtual folder), create it or attach to root
+      if (!parent) {
+        // Find the closest existing ancestor
+        let ancestorPath = parentPath;
+        let ancestor = null;
+        while (ancestorPath.includes('/')) {
+          ancestorPath = ancestorPath.split('/').slice(0, -1).join('/');
+          ancestor = pathToNode.get(ancestorPath);
+          if (ancestor) break;
+        }
+        
+        if (ancestor) {
+          if (!ancestor.children.some((c: any) => c.id === node.id)) {
+            ancestor.children.push(node);
+          }
+        } else {
+          // No ancestor found, attach to repository root
+          if (!rootNode.children.some((c: any) => c.id === node.id)) {
+            rootNode.children.push(node);
+          }
+        }
+      } else {
+        if (!parent.children.some((c: any) => c.id === node.id)) {
+          parent.children.push(node);
+        }
+      }
+    } else {
+      // Top level node, attach to repository root
+      if (!rootNode.children.some((c: any) => c.id === node.id)) {
+        rootNode.children.push(node);
+      }
+    }
+  }
+
+  // 3. Attach Symbols using Edges (symbols don't have paths in the same way)
   for (const edge of allEdges) {
     if (!edge.out || !edge.in) continue;
     const fromId = edge.out.toString();
@@ -232,26 +283,15 @@ async function executeStructureQuery(store: IStore, budget: TokenBudgetManager, 
     const fromNode = nodeMap.get(fromId);
     const toNode = nodeMap.get(toId);
     
-    if (fromNode && toNode) {
-      const fromRank = typeRank[fromNode.type] || 99;
-      const toRank = typeRank[toNode.type] || 99;
-      
-      // If ranks are different, use rank to determine direction
-      // If ranks are same (e.g. module -> module), trust the edge direction (out -> in)
-      if (fromRank < toRank || (fromRank === toRank && fromRank <= 2)) {
-        if (!fromNode.children.some((c: any) => c.id === toNode.id)) {
-          fromNode.children.push(toNode);
-        }
-      } else if (toRank < fromRank) {
-        if (!toNode.children.some((c: any) => c.id === fromNode.id)) {
-          toNode.children.push(fromNode);
-        }
+    if (fromNode && toNode && toNode.type === 'symbol') {
+      if (!fromNode.children.some((c: any) => c.id === toNode.id)) {
+        fromNode.children.push(toNode);
       }
     }
-
   }
 
-  const fullTree = nodeMap.get(rootId);
+  const fullTree = rootNode;
+
   if (!fullTree) throw new Error('Structure not found.');
 
   promoteModules(fullTree);
@@ -302,8 +342,12 @@ async function executeStructureQuery(store: IStore, budget: TokenBudgetManager, 
   let targetTree = fullTree;
   if (focusPath) {
     const focusNode = Array.from(nodeMap.values()).find(n => n.path === focusPath);
-    if (focusNode) targetTree = focusNode;
+    if (!focusNode) {
+      throw new Error(`Path "${focusPath}" not found in the indexed codebase. Ensure the path is relative to the repository root and has been parsed.`);
+    }
+    targetTree = focusNode;
   }
+
 
   pruneAndFold(targetTree, 0);
 
