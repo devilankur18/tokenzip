@@ -64,8 +64,7 @@ By reading **Skeletons** during navigation and only fetching full implementation
 | **Token Savings** | 0% | **73% 🚀** |
 | **Input Cost (Per Turn)** | 🔴 11.3M Tokens | 🟢 2.9M Tokens |
 | **5-Turn Cumulative** | 🔴 56.5M Tokens | 🟢 14.5M Tokens |
-| **Direct Savings (5 Turns)** | **--** | **42M Tokens (~$120+ Saved)** |
-| **Context Headroom** | ❌ Zero (Truncated) | ✅ Fits 3.8x more context |
+| **Direct Savings (5 Turns)** | **--** | **42M Tokens (~$210+ for claude opus Saved)** |
 
 *By reducing the "per-file" token tax, TokenZip allows your AI agents to maintain massive repositories in their active memory without hitting token limits or burning through API budgets.*
 
@@ -83,15 +82,36 @@ By reading **Skeletons** during navigation and only fetching full implementation
 
 ---
 
-## 🚀 Vision: The Agentic Future
+## 🚀 Vision: Agentic Infrastructure for the Modern Stack
 
-TokenZip isn't just a database; it is the **Cognitive Infrastructure** that allows AI to transition from a reactive "chatbot" to an autonomous **Digital Engineer**.
+**TokenZip** is not just a compression utility; it is the **Cognitive Infrastructure** that transforms AI from a reactive "agent" into an autonomous **AI Engineer**. By building a persistent, multi-level Knowledge Graph of your codebase, we provide agents with the "Long-Term Memory" they need to act with precision.
 
-- **Query vs. Read**: Replaces expensive 50k-token "context dumps" with 500-token **Structured Queries**. Agents stop "reading" files to find dependencies and start "querying" the graph—drastically reducing hallucinations and costs.
-- **Autonomous Multi-Hop Reasoning**: Enables **Recursive Impact Analysis**. An agent can trace who calls a function across the entire repository, allowing for reliable, end-to-end refactoring without breaking the build.
-- **Semantic Grounding**: Acts as the project's **Ground Truth**. By moving from creative token prediction to **Structural Assembly**, the agent verifies every symbol and import before writing a single line of code.
-- **Proactive Context Fetching**: The agent no longer waits for you to provide context; it proactively fetches its own blueprints from the Memory Mesh, maintaining a perfect mental model of the entire codebase.
-- **Consistency & Intuition**: By consulting the graph's existing patterns, the agent develops an "intuition" for your specific project style, ensuring that new code mimics existing middleware, error handling, and standards perfectly.
+### 🧠 Why This Matters
+Vectorised Search and "context-stuffing" are like giving an engineer a stack of Polaroid photos and asking them to build a skyscraper. **TokenZip** gives them the blueprints.
+
+### 🛠 Real-World Value & Use Cases
+
+#### 1. Surgical Context: "Query vs. Read"
+*   **The Problem:** Burning 50k tokens just to explain a project structure to a model.
+*   **The Solution:** TokenZip replaces "context dumps" with **500-token Structured Queries**. Agents don't "read" files to find dependencies; they query the graph.
+*   **Real Use Case:** An agent can instantly locate every implementation of a specific interface across a monorepo without scanning a single unrelated line of code.
+
+#### 2. Autonomous Multi-Hop Reasoning
+*   **The Problem:** "Refactor this function" often leads to broken builds because the AI missed a call site in another module.
+*   **The Solution:** Enables **Recursive Impact Analysis**. The agent traces the "social graph" of your code to see exactly who calls what, where, and how.
+*   **Real Use Case:** Safely refactor a core API endpoint. TokenZip alerts the agent to 12 different call sites across 3 services, allowing for a verified, end-to-end update.
+
+#### 3. Semantic Grounding (The "Ground Truth")
+*   **The Problem:** LLMs "hallucinate" library versions or function signatures when they aren't in the immediate window.
+*   **The Solution:** Moves the AI from *Creative Token Prediction* to **Structural Assembly**. The agent verifies every symbol, import, and type against the Memory Mesh before writing code.
+*   **Real Use Case:** Ensuring new code perfectly matches the specific middleware and error-handling patterns used in the rest of your proprietary codebase.
+
+#### 4. Federated Memory (Institutional Lore)
+*   **The Problem:** "Tribal knowledge" is lost when developers leave or when working across siloed repositories.
+*   **The Solution:** A persistent **Repository of Record**. The graph stores the *reasoning* and *relationships* of the code, not just the text.
+*   **Real Use Case:** A Frontend agent "consults" the memory of the Backend repo to understand a schema change—eliminating the need for manual cross-team coordination.
+
+> **The Bottom Line:** TokenZip moves your AI strategy from "guessing based on text" to "navigating based on logic." It is the foundation for agents that don't just write code, but understand the system they are building.
 
 ---
 
