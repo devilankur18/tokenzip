@@ -131,32 +131,36 @@ const App: React.FC = () => {
       setIsSearching(true);
       try {
         const query = searchTerm.toLowerCase();
-        const res = await db.query(
-          'SELECT * FROM symbol WHERE string::lowercase(name) CONTAINS $q LIMIT 10; SELECT * FROM file WHERE string::lowercase(path) CONTAINS $q LIMIT 10;',
-          { q: query }
-        );
+        let queryStr = '';
+        if (searchTypeFilter === 'all') {
+          queryStr = 'SELECT * FROM symbol WHERE string::lowercase(name) CONTAINS $q LIMIT 15; SELECT * FROM file WHERE string::lowercase(path) CONTAINS $q LIMIT 15;';
+        } else if (searchTypeFilter === 'file') {
+          queryStr = 'SELECT * FROM file WHERE string::lowercase(path) CONTAINS $q LIMIT 25;';
+        } else {
+          queryStr = 'SELECT * FROM symbol WHERE string::lowercase(name) CONTAINS $q LIMIT 25;';
+        }
+
+        const res = await db.query<any[][]>(queryStr, { q: query });
         
-        const getResult = (r: any) => Array.isArray(r) ? r : (r?.result || []);
+        const getNodes = (data: any, type: 'symbol' | 'file') => {
+          const list = Array.isArray(data) ? data : (data?.result || []);
+          return list.map((n: any) => ({
+            ...n,
+            id: n.id.toString(),
+            type,
+            name: type === 'symbol' ? n.name : (n.path.split('/').pop() || n.path),
+            path: n.path
+          }));
+        };
 
-        const symbols = getResult(res[0]).map((n: any) => ({
-          ...n,
-          id: n.id.toString(),
-          type: 'symbol',
-          name: n.name,
-          val: 3,
-          color: '#a855f7'
-        }));
+        let results: any[] = [];
+        if (searchTypeFilter === 'all') {
+          results = [...getNodes(res[0], 'symbol'), ...getNodes(res[1], 'file')];
+        } else {
+          results = getNodes(res[0], searchTypeFilter as any);
+        }
 
-        const files = getResult(res[1]).map((n: any) => ({
-          ...n,
-          id: n.id.toString(),
-          type: 'file',
-          name: n.path.split('/').pop() || n.path,
-          val: 8,
-          color: '#6366f1'
-        }));
-
-        setSearchResults([...symbols, ...files].slice(0, 10));
+        setSearchResults(results.slice(0, 20));
       } catch (err) {
         console.error('Search error:', err);
       } finally {
@@ -165,7 +169,7 @@ const App: React.FC = () => {
     }, 300);
 
     return () => clearTimeout(searchTimeout.current);
-  }, [searchTerm, db]);
+  }, [searchTerm, db, searchTypeFilter]);
 
   const handleSelectSearchResult = (node: Node) => {
     // Add to graph if not present
@@ -646,24 +650,22 @@ const App: React.FC = () => {
                   </div>
                 </div>
                 <div className="results-list">
-                  {searchResults
-                    .filter(r => searchTypeFilter === 'all' || r.type === searchTypeFilter)
-                    .map(result => (
-                      <div 
-                        key={result.id} 
-                        className="search-result-row"
-                        onClick={() => handleSelectSearchResult(result)}
-                      >
-                        <div className={`result-type-icon ${result.type}`}>
-                          {result.type === 'file' ? <FileCode size={16} /> : <Zap size={16} />}
-                        </div>
-                        <div className="result-content">
-                          <div className="result-primary">{result.name}</div>
-                          <div className="result-secondary">{result.path || result.id}</div>
-                        </div>
-                        <ChevronRight className="arrow-icon" size={14} />
+                  {searchResults.map(result => (
+                    <div 
+                      key={result.id} 
+                      className="search-result-row"
+                      onClick={() => handleSelectSearchResult(result)}
+                    >
+                      <div className={`result-type-icon ${result.type}`}>
+                        {result.type === 'file' ? <FileCode size={16} /> : <Zap size={16} />}
                       </div>
-                    ))}
+                      <div className="result-content">
+                        <div className="result-primary">{result.name}</div>
+                        <div className="result-secondary">{result.path || result.id}</div>
+                      </div>
+                      <ChevronRight className="arrow-icon" size={14} />
+                    </div>
+                  ))}
                 </div>
               </div>
             )}
