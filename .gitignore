@@ -13,3 +13,6 @@ db/
 .DS_Store
 data/
 .tokenzip/*
+
+.test-bench/*
+test-bench-repo/
