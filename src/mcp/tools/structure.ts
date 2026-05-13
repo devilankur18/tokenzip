@@ -21,7 +21,8 @@ export function createStructureTools(store: IStore, repoPath: string, budget: To
         const buildRecursiveQuery = (d: number): string => {
           const fields = 'id, name, type, path, kind';
           if (d <= 0) return fields;
-          return `${fields}, (SELECT ${buildRecursiveQuery(d - 1)} FROM ->contains->ANY) AS children`;
+          // Use ->contains.out to get target nodes of the 'contains' edge
+          return `${fields}, (SELECT ${buildRecursiveQuery(d - 1)} FROM ->contains.out) AS children`;
         };
 
         const selection = buildRecursiveQuery(depth);

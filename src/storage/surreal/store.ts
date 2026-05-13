@@ -114,6 +114,8 @@ export class SurrealStore implements IStore {
       '--user', 'root',
       '--pass', 'root',
       '--bind', `127.0.0.1:${port}`,
+      '--default-namespace', 'tokenzip',
+      '--default-database', 'graph',
       `surrealkv:${dbDir}`
     ], {
       detached: false
@@ -187,6 +189,7 @@ export class SurrealStore implements IStore {
   }
 
   async migrate(): Promise<void> {
+    await this.db.query('DEFINE NAMESPACE IF NOT EXISTS tokenzip; DEFINE DATABASE IF NOT EXISTS graph;');
     await this.db.query(SCHEMA_DEFINITION);
   }
 
