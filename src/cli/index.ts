@@ -12,6 +12,7 @@ import { mcpCommand } from './commands/mcp.js';
 import { reportCommand } from './commands/report.js';
 import { doctorCommand } from './commands/doctor.js';
 import { debugCommand } from './commands/debug.js';
+import { statsCommand } from './commands/stats.js';
 
 const program = new Command();
 
@@ -45,6 +46,7 @@ program.addCommand(mcpCommand);
 program.addCommand(doctorCommand);
 program.addCommand(reportCommand);
 program.addCommand(debugCommand);
+program.addCommand(statsCommand);
 
 program.parseAsync(process.argv).catch(err => {
   console.error(err);
