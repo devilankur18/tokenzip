@@ -17,8 +17,8 @@ export function createSmartFileReadTools(store: IStore, repoPath: string, budget
           path: { type: 'string', description: 'File path relative to repo root' },
           mode: {
             type: 'string',
-            enum: ['interface_only', 'skeleton', 'dependency_only', 'implementation_of'],
-            default: 'interface_only'
+            enum: ['interface_only', 'skeleton', 'dependency_only', 'implementation_of', 'auto'],
+            default: 'auto'
           },
           target_symbol: {
             type: 'string',
@@ -38,7 +38,7 @@ export function createSmartFileReadTools(store: IStore, repoPath: string, budget
         required: ['path']
       },
       handler: async (args: any) => {
-        const { path: filePath, mode = 'interface_only', target_symbol, max_tokens = 4000, include_docs = false } = args;
+        const { path: filePath, mode = 'auto', target_symbol, max_tokens = 4000, include_docs = false } = args;
         const absPath = path.resolve(repoPath, filePath);
 
         // 1. Check if file exists in DB
@@ -62,9 +62,21 @@ export function createSmartFileReadTools(store: IStore, repoPath: string, budget
         }
 
         const fileId = fileNode.id;
+        let finalMode = mode;
 
-        // 2. Execute requested strategy
-        let result = await executeStrategy(mode, filePath, absPath, fileId, store, target_symbol, budget, max_tokens, include_docs);
+        // 2. Resolve 'auto' mode
+        if (mode === 'auto') {
+          // Default to skeleton, but check if it's too big
+          const testRes = await executeStrategy('skeleton', filePath, absPath, fileId, store, target_symbol, budget, max_tokens, include_docs);
+          if (testRes.tokensUsed > max_tokens) {
+            finalMode = 'interface_only';
+          } else {
+            finalMode = 'skeleton';
+          }
+        }
+
+        // 3. Execute requested strategy
+        let result = await executeStrategy(finalMode, filePath, absPath, fileId, store, target_symbol, budget, max_tokens, include_docs);
 
         // 3. Degrade logic for skeleton
         if (mode === 'skeleton' && budget.estimate(result.content) > max_tokens) {

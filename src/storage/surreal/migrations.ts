@@ -138,4 +138,8 @@ DEFINE INDEX OVERWRITE idx_symbol_export ON symbol FIELDS isExported;
 DEFINE INDEX OVERWRITE idx_module_path ON module FIELDS path UNIQUE;
 DEFINE INDEX OVERWRITE idx_commit_hash ON commit FIELDS hash UNIQUE;
 DEFINE INDEX OVERWRITE idx_dep_name ON dependency FIELDS name, module_id;
+
+// --- FULL TEXT SEARCH INDEXES ---
+DEFINE INDEX OVERWRITE idx_symbol_search ON symbol FIELDS name, docstring SEARCH ANALYZER ascii BM25 HIGHLIGHTS;
+DEFINE INDEX OVERWRITE idx_file_search ON file FIELDS path SEARCH ANALYZER ascii BM25;
 `;

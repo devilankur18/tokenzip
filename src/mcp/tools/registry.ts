@@ -4,6 +4,9 @@ import { createStructureTools } from './structure.js';
 import { createSymbolTools } from './symbol.js';
 import { createSmartFileReadTools } from './smart-file-read.js';
 import { createFetchMetadataTools } from './fetch-metadata.js';
+import { createSearchTools } from './search.js';
+import { createNavigationTools } from './navigation.js';
+import { createContextTools } from './context.js';
 
 export function registerTools(store: IStore, repoPath: string, budget: TokenBudgetManager) {
   const tools: any[] = [];
@@ -11,5 +14,8 @@ export function registerTools(store: IStore, repoPath: string, budget: TokenBudg
   tools.push(...createSymbolTools(store, repoPath, budget));
   tools.push(...createSmartFileReadTools(store, repoPath, budget));
   tools.push(...createFetchMetadataTools(store));
+  tools.push(...createSearchTools(store, repoPath, budget));
+  tools.push(...createNavigationTools(store, repoPath, budget));
+  tools.push(...createContextTools(store, repoPath, budget));
   return tools;
 }

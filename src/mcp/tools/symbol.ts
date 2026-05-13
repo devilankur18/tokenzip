@@ -17,8 +17,25 @@ export function createSymbolTools(store: IStore, repoPath: string, budget: Token
         required: ['symbol_name'],
       },
       handler: async (args: any) => {
-        const symbols = await store.query('SELECT *, (SELECT path FROM file WHERE id = $parent.fileId)[0].path as filePath FROM symbol WHERE name = $name', { name: args.symbol_name });
+        const symbols = await store.query<any>('SELECT *, (SELECT path FROM file WHERE id = $parent.fileId)[0].path as filePath FROM symbol WHERE name = $name', { name: args.symbol_name });
         
+        if (symbols.length > 1) {
+          const candidates = symbols.map(s => ({
+            id: s.id,
+            kind: s.kind,
+            filePath: s.filePath,
+            signature: s.signature
+          }));
+          return {
+            content: [{ 
+              type: 'text', 
+              text: `Multiple symbols found for '${args.symbol_name}'. Please specify symbol_id in your next call:\n${JSON.stringify(candidates, null, 2)}` 
+            }],
+            isError: true,
+            candidates
+          };
+        }
+
         const response = budget.truncate({ symbols });
         return {
           content: [{ type: 'text', text: JSON.stringify(response, null, 2) }],

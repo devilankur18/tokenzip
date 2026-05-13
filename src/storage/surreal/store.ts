@@ -5,56 +5,185 @@ import { GraphNode, GraphEdge, GraphResult, StoreStats } from '../../types/graph
 import { SCHEMA_DEFINITION } from './migrations.js';
 import fs from 'fs';
 import path from 'path';
+import { spawn, ChildProcess } from 'child_process';
+import net from 'net';
 
 export class SurrealStore implements IStore {
   private db: Surreal;
   private dbPath: string;
+  private serverProcess: ChildProcess | null = null;
+  private socketPath: string | null = null;
 
   constructor(dbPath: string) {
     this.dbPath = dbPath;
-    this.db = new Surreal({
-      engines: {
-        ...createNodeEngines(),
-      },
-    });
+    this.db = new Surreal();
   }
 
   async initialize(): Promise<void> {
-    if (!this.dbPath.startsWith('mem:')) {
-      const parent = path.dirname(this.dbPath);
-      if (!fs.existsSync(parent)) {
-        fs.mkdirSync(parent, { recursive: true });
+    if (this.dbPath.startsWith('mem:')) {
+      await this.db.connect(this.dbPath);
+      await this.db.use({ namespace: 'tokenzip', database: 'graph' });
+      return;
+    }
+
+    const parent = path.dirname(this.dbPath);
+    if (!fs.existsSync(parent)) {
+      fs.mkdirSync(parent, { recursive: true });
+    }
+
+    const portPath = path.resolve(parent, 'server.port');
+    const lockPath = path.resolve(parent, 'server.lock');
+
+    // 1. Try connecting to existing server via port file
+    if (fs.existsSync(portPath)) {
+      try {
+        const port = fs.readFileSync(portPath, 'utf8').trim();
+        // console.log(`Connecting to existing server at http://127.0.0.1:${port}...`);
+        await this.db.connect(`http://127.0.0.1:${port}`);
+        await this.db.signin({ username: 'root', password: 'root' });
+        await this.db.use({ namespace: 'tokenzip', database: 'graph' });
+        return;
+      } catch (err) {
+        console.log('Existing server not responding, cleaning up stale port/lock...');
+        try { fs.unlinkSync(portPath); } catch {}
+        try { fs.unlinkSync(lockPath); } catch {}
       }
     }
+
+    // 2. No server running, try to become the owner
+    try {
+      fs.writeFileSync(lockPath, process.pid.toString(), { flag: 'wx' });
+    } catch (err) {
+      // Check if the lock is stale
+      try {
+        const stalePid = parseInt(fs.readFileSync(lockPath, 'utf8').trim());
+        if (isNaN(stalePid) || !this.isProcessRunning(stalePid)) {
+          console.log(`Found stale lock file (PID ${stalePid} not running). Cleaning up...`);
+          try { fs.unlinkSync(lockPath); } catch {}
+          return this.initialize();
+        }
+      } catch (readErr) {
+        // If we can't read it, assume it's valid for now
+      }
+
+      console.log('Another process is starting the server, waiting...');
+      await new Promise(r => setTimeout(r, 2000));
+      return this.initialize();
+    }
+
+    // Find a deterministic port based on the repo path
+    const repoPath = path.resolve(parent, '..');
+    const port = this.getDeterministicPort(repoPath);
+
+    // console.log(`Starting background SurrealDB server on port ${port} for ${this.dbPath}...`);
+    await this.startBackgroundServer(port);
     
-    const connectionString = this.dbPath.includes('://')
-      ? this.dbPath 
-      : `surrealkv:${this.dbPath}`;
+    try {
+      await this.db.connect(`http://127.0.0.1:${port}`);
+      await this.db.signin({ username: 'root', password: 'root' });
+      await this.db.use({ namespace: 'tokenzip', database: 'graph' });
+      fs.writeFileSync(portPath, port.toString());
+      // console.log('Connected to background server.');
+    } catch (err) {
+      console.error('Failed to connect to newly started server:', err);
+      this.cleanup();
+      throw err;
+    }
+
+    // Register cleanup on exit
+    process.on('exit', () => this.cleanup());
+    process.on('SIGINT', () => { this.cleanup(); process.exit(); });
+    process.on('SIGTERM', () => { this.cleanup(); process.exit(); });
+  }
+
+  private getDeterministicPort(repoPath: string): number {
+    let hash = 0;
+    for (let i = 0; i < repoPath.length; i++) {
+      hash = ((hash << 5) - hash) + repoPath.charCodeAt(i);
+      hash |= 0;
+    }
+    // Map to 10000-60000 range
+    return 10000 + (Math.abs(hash) % 50000);
+  }
+
+  private async startBackgroundServer(port: number): Promise<void> {
+    const dbDir = path.resolve(this.dbPath);
     
-    console.log(`Connecting to surreal db at ${connectionString}...`);
-    let timeoutId: NodeJS.Timeout;
-    const timeout = new Promise((_, reject) => {
-      timeoutId = setTimeout(() => reject(new Error('Connection timed out after 10s. Is another TokenZip process running?')), 10000);
+    this.serverProcess = spawn('surreal', [
+      'start',
+      '--user', 'root',
+      '--pass', 'root',
+      '--bind', `127.0.0.1:${port}`,
+      `surrealkv:${dbDir}`
+    ], {
+      detached: false
     });
 
-    try {
-      await Promise.race([
-        this.db.connect(connectionString),
-        timeout
-      ]);
-      clearTimeout(timeoutId!);
+    // Wait for the server to be ready (poll the port)
+    let retries = 0;
+    while (retries < 50) {
+      if (await this.isPortOpen(port)) {
+        return;
+      }
+      await new Promise(r => setTimeout(r, 200));
+      retries++;
+    }
 
-      console.log('Connected to DB.');
-      await this.db.use({ namespace: 'tokenzip', database: 'graph' });
-      console.log('Using namespace/db.');
-    } catch (err) {
-      console.error('SurrealDB Connection Error:', err);
-      throw err;
+    throw new Error(`Timed out waiting for SurrealDB server on port ${port}`);
+  }
+
+  private isProcessRunning(pid: number): boolean {
+    try {
+      process.kill(pid, 0);
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  private isPortOpen(port: number): Promise<boolean> {
+    return new Promise((resolve) => {
+      const socket = new net.Socket();
+      const timeout = setTimeout(() => {
+        socket.destroy();
+        resolve(false);
+      }, 100);
+
+      socket.on('connect', () => {
+        clearTimeout(timeout);
+        socket.destroy();
+        resolve(true);
+      });
+
+      socket.on('error', () => {
+        clearTimeout(timeout);
+        socket.destroy();
+        resolve(false);
+      });
+
+      socket.connect(port, '127.0.0.1');
+    });
+  }
+
+  private cleanup() {
+    if (this.serverProcess) {
+      this.serverProcess.kill();
+      this.serverProcess = null;
+    }
+    const parent = path.dirname(this.dbPath);
+    const portPath = path.resolve(parent, 'server.port');
+    const lockPath = path.resolve(parent, 'server.lock');
+    if (fs.existsSync(portPath)) {
+      try { fs.unlinkSync(portPath); } catch {}
+    }
+    if (fs.existsSync(lockPath)) {
+      try { fs.unlinkSync(lockPath); } catch {}
     }
   }
 
   async close(): Promise<void> {
     await this.db.close();
+    this.cleanup();
   }
 
   async migrate(): Promise<void> {
