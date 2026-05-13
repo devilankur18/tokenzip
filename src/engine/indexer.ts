@@ -12,6 +12,14 @@ import os from 'node:os';
 import { RecordId, StringRecordId } from 'surrealdb';
 
 const IGNORE_DIRS = new Set(['node_modules', '.git', 'dist', 'build', '.next', '.tokenzip']);
+const SUPPORTED_EXTS = new Set(['.ts', '.tsx', '.js', '.jsx', '.go', '.py', '.java', '.c', '.cpp', '.h', '.hpp', '.rs', '.rb', '.php', '.swift', '.kt']);
+
+export interface IndexerOptions {
+  concurrency?: number;
+  directory?: string;
+  types?: string[];
+  regex?: string;
+}
 
 export class Indexer {
   private store: IStore;
@@ -20,12 +28,14 @@ export class Indexer {
   private unresolvedEdges: EdgeIR[] = [];
   private ignorePatterns: string[] = [];
   private concurrency: number;
+  private options: IndexerOptions;
 
-  constructor(store: IStore, repoPath: string, concurrency?: number) {
+  constructor(store: IStore, repoPath: string, options: IndexerOptions = {}) {
     this.store = store;
     this.registry = new ExtractorRegistry();
     this.repoPath = repoPath;
-    this.concurrency = concurrency || Math.max(1, os.cpus().length - 1);
+    this.options = options;
+    this.concurrency = options.concurrency || Math.max(1, os.cpus().length - 1);
     this.loadGitIgnore();
   }
 
@@ -389,6 +399,24 @@ export class Indexer {
             }
             // Only add files that are supported by at least one extractor
             if (this.registry.supportsFile(fullPath)) {
+              const relativePath = path.relative(this.repoPath, fullPath);
+              
+              // Apply CLI filters
+              if (this.options.directory) {
+                const filterDir = this.options.directory.replace(/\\/g, '/');
+                if (!relativePath.startsWith(filterDir)) return;
+              }
+
+              if (this.options.types && this.options.types.length > 0) {
+                const types = this.options.types.map(t => t.startsWith('.') ? t : `.${t}`);
+                if (!types.some(t => fullPath.endsWith(t))) return;
+              }
+
+              if (this.options.regex) {
+                const re = new RegExp(this.options.regex);
+                if (!re.test(relativePath)) return;
+              }
+
               arrayOfFiles.push(fullPath);
             }
           }

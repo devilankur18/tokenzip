@@ -4,7 +4,7 @@ export class FileLineCache {
   private cache = new Map<string, string[]>();
   private readonly maxSize: number;
 
-  constructor(maxSize: number = 100) {
+  constructor(maxSize: number = 1000) {
     this.maxSize = maxSize;
   }
 

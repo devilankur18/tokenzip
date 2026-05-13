@@ -131,6 +131,7 @@ DEFINE INDEX OVERWRITE idx_file_module ON file FIELDS module_id;
 DEFINE INDEX OVERWRITE idx_symbol_name ON symbol FIELDS name;
 DEFINE INDEX OVERWRITE idx_symbol_kind ON symbol FIELDS kind;
 DEFINE INDEX OVERWRITE idx_symbol_file ON symbol FIELDS fileId;
+DEFINE INDEX OVERWRITE idx_symbol_file_start ON symbol FIELDS fileId, startLine;
 DEFINE INDEX OVERWRITE idx_symbol_export ON symbol FIELDS isExported;
 DEFINE INDEX OVERWRITE idx_module_path ON module FIELDS path UNIQUE;
 DEFINE INDEX OVERWRITE idx_commit_hash ON commit FIELDS hash UNIQUE;
