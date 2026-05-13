@@ -38,6 +38,7 @@ Add TokenZip to your Claude Desktop configuration (usually at `~/Library/Applica
 | `get_file_symbols` | List all functions, classes, and types in a file. |
 | `get_dependencies` | See what a file imports. |
 | `smart_file_read` | Read a file in "skeleton" mode to save tokens. |
+| `query_repo_structure` | Hierarchical overview (Modules -> Files -> Symbols) with recursive `depth`. |
 
 ## Testing Tools Directly
 You can test any MCP tool directly from your terminal using the `mcp` command:
@@ -45,7 +46,16 @@ You can test any MCP tool directly from your terminal using the `mcp` command:
 ```bash
 tokenzip mcp query_symbol symbol_name=myFunctionName
 tokenzip mcp smart_file_read path=src/index.ts mode=skeleton
+tokenzip mcp query_repo_structure depth=2
 ```
+
+## Deep Context Strategies
+
+TokenZip tools are optimized for agentic workflows where token budgets are tight:
+
+- **Recursive Mapping**: Use `query_repo_structure` to understand the physical and logical layout of a repository without scanning every directory manually.
+- **Skeleton Navigation**: Use `smart_file_read` in `skeleton` mode to see "how to use" a file (imports + signatures) without fetching the "how it works" (implementation bodies).
+- **Auto-Pruning**: Structural tools automatically use "Balanced Truncation" to fit large directory structures into the context window by intelligently pruning the largest sub-lists first.
 
 ## Troubleshooting
 - **No data returned**: Ensure you have run `tokenzip parse` first.

@@ -79,6 +79,8 @@ By reading **Skeletons** during navigation and only fetching full implementation
 - **AI-Ready (MCP)**: Exposes the graph as an **MCP server** for deep context in Claude Desktop, Cursor, and more.
 - **Incremental Parsing**: Only indexes changed files using content hashing—perfect for large repos.
 - **Git Enrichment**: Maps symbol history to git commits for better context.
+- **Deep Structural Awareness**: Recursive `query_repo_structure` allows agents to traverse Modules -> Files -> Symbols in one shot.
+- **High Concurrency & Stability**: Built-in stale process detection and lock recovery for reliable multi-agent access.
 
 ---
 
@@ -192,6 +194,11 @@ Add this to your `claude_desktop_config.json`:
 
 > [!TIP]
 > If you are running TokenZip from source, run `npm link` in the root of this project to make the `tokenzip` command available globally.
+
+### 🌳 Deep Structural Awareness
+The `query_repo_structure` tool now supports recursive depth, allowing agents to understand your repository's layout from modules down to individual symbols in a single query.
+- **Recursive Hierarchy**: Explore Repo → Folders → Files → Symbols with configurable depth.
+- **Balanced Truncation**: High-density structures are pruned intelligently (targeting the largest lists first) to fit within AI context windows while preserving the overall "map."
 
 For more details, see the [MCP Guide](docs/mcp_guide.md).
 

@@ -363,7 +363,7 @@ export class SurrealStore implements IStore {
     filter?: string
   ): Promise<GraphResult> {
     // Basic traversal approximation for now using surrealql
-    const edgesList = edgeTypes.map(e => `type::table(${e})`).join(',');
+    const edgesList = edgeTypes.join(',');
     let dirOp = '->';
     if (direction === 'inbound') dirOp = '<-';
     else if (direction === 'both') dirOp = '<->';
@@ -383,7 +383,7 @@ export class SurrealStore implements IStore {
 
     for (let d = 0; d < depth; d++) {
       if (currentLevelIds.length === 0) break;
-      const q = `SELECT * FROM type::record($ids)${dirOp}(${edgesList})`;
+      const q = `SELECT * FROM $ids${dirOp}(${edgesList})`;
       const edgeRes = await this.db.query<GraphEdge[][]>(q, { ids: currentLevelIds, edgesList });
       const currentEdges = edgeRes[0] || [];
       const nextLevelIds: string[] = [];
@@ -393,13 +393,26 @@ export class SurrealStore implements IStore {
           edges.push(e);
           visitedEdges.add(e.id!);
           
-          const targetId = direction === 'inbound' ? e.in as unknown as string : e.out as unknown as string;
-          if (!visitedNodes.has(targetId)) {
-            const targetNode = await this.getNode(targetId);
+          let targetId: string;
+          if (direction === 'inbound') {
+            targetId = (e as any).out.toString();
+          } else if (direction === 'outbound') {
+            targetId = (e as any).in.toString();
+          } else {
+            // 'both' - pick the side that isn't one of the current level IDs
+            const currentIdsSet = new Set(currentLevelIds.map(id => id.toString()));
+            const outStr = (e as any).out.toString();
+            const inStr = (e as any).in.toString();
+            targetId = currentIdsSet.has(outStr) ? inStr : outStr;
+          }
+          
+          const targetIdStr = targetId.toString();
+          if (!visitedNodes.has(targetIdStr)) {
+            const targetNode = await this.getNode(targetIdStr);
             if (targetNode) {
               nodes.push(targetNode);
-              visitedNodes.add(targetId);
-              nextLevelIds.push(targetId);
+              visitedNodes.add(targetIdStr);
+              nextLevelIds.push(targetIdStr);
             }
           }
         }
