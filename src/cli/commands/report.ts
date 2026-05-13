@@ -3,7 +3,6 @@ import { SurrealStore } from '../../storage/surreal/store.js';
 import { resolveDbPath } from '../resolve-db.js';
 import { ReportIndexer } from '../../engine/report-indexer.js';
 import { ReportGenerator } from '../../engine/report-generator.js';
-import { GitUtils } from '../../utils/git-utils.js';
 import path from 'path';
 import fs from 'fs';
 
@@ -41,8 +40,7 @@ export const reportCommand = new Command('report')
 
       console.log('\n✨ Analysis complete. Generating files...');
 
-      const repoName = GitUtils.getRepoName(repoPath);
-      const generator = new ReportGenerator(repoName);
+      const generator = new ReportGenerator(path.basename(repoPath));
       const md = generator.generateMarkdown(metrics);
       const csv = generator.generateCSV(metrics);
 

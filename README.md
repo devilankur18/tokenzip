@@ -176,7 +176,14 @@ tokenzip smart-read src/index.ts --mode interface_only
 tokenzip smart-read lib/application.js --mode implementation_of --symbol handle
 ```
 
+
 ---
+
+### 📊 Benchmark: 73% Token Savings
+
+On a codebase with **11.3M tokens**, TokenZip's `smart-read` reduced the AI context footprint to just **2.9M tokens** — a **73% reduction** in overhead.  
+Check out the [full benchmark report](https://gist.github.com/devilankur18/e21baec76d348dd2f1cd3339c3a1d319) for detailed file-level and directory-specific efficiency metrics.
+
 
 ### `tokenzip serve`
 
