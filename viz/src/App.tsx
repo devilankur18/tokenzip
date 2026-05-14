@@ -46,8 +46,8 @@ const App: React.FC = () => {
   const [isMaximized, setIsMaximized] = useState(false);
   const [searchTypeFilter, setSearchTypeFilter] = useState<'all' | 'file' | 'symbol'>('all');
   const [filters, setFilters] = useState({
-    nodes: { file: true, symbol: true },
-    edges: { calls: true, contains: true, imports: true, implements: true, exports: true, references: true }
+    nodes: { file: true, symbol: true, module: true },
+    edges: { calls: true, contains: true, imports: true, implements: true, exports: true, references: true, depends_on: true }
   });
   const fgRef = useRef<any>();
 
@@ -75,26 +75,42 @@ const App: React.FC = () => {
 
   const fetchData = async (surreal: Surreal) => {
     try {
-      // Progressive Loading: Load files and their relationships first
-      const fileRes = await surreal.query<any[][]>('SELECT * FROM file LIMIT 3000');
+      // Progressive Loading: Load files, modules and their architectural relationships
+      const res = await surreal.query<any[][]>(`
+        SELECT id, path FROM file LIMIT 5000;
+        SELECT id, name, path FROM module LIMIT 1000;
+        SELECT id, in as source, out as target FROM imports, exports, depends_on, contains LIMIT 50000;
+        SELECT name, path FROM repository LIMIT 1;
+      `);
       
-      const nodes: Node[] = (fileRes[0] || []).map((n: any) => {
-        const idStr = n.id.toString();
-        return {
-          id: idStr,
+      const files = res[0] || [];
+      const modules = res[1] || [];
+      const rawEdges = res[2] || [];
+      const repo = res[3]?.[0];
+
+      if (repo) setRepoInfo(repo);
+
+      const nodes: Node[] = [
+        ...files.map((n: any) => ({
+          id: n.id.toString(),
           type: 'file',
-          name: n.path.split('/').pop() || n.path || idStr,
+          name: n.path.split('/').pop() || n.path,
           path: n.path,
-          val: 10,
+          val: 8,
           color: '#6366f1'
-        };
-      });
+        })),
+        ...modules.map((n: any) => ({
+          id: n.id.toString(),
+          type: 'module',
+          name: n.name || n.path?.split('/').pop() || n.id.toString(),
+          path: n.path,
+          val: 12,
+          color: '#10b981'
+        }))
+      ];
 
       const nodeIds = new Set(nodes.map(n => n.id));
-
-      // Initially only load architectural edges (imports, exports, depends_on)
-      const edgeRes = await surreal.query<any[][]>('SELECT *, in as source, out as target FROM imports, exports, depends_on LIMIT 20000');
-      const links: Edge[] = (edgeRes[0] || [])
+      const links: Edge[] = rawEdges
         .map((e: any) => ({
           id: e.id.toString(),
           source: e.source.toString(),
@@ -102,11 +118,6 @@ const App: React.FC = () => {
           type: e.type || e.id.toString().split(':')[0]
         }))
         .filter(l => nodeIds.has(l.source) && nodeIds.has(l.target));
-
-      const repoRes = await surreal.query<any[][]>('SELECT name, path FROM repository LIMIT 1');
-      if (repoRes[0]?.[0]) {
-        setRepoInfo(repoRes[0][0]);
-      }
 
       setGraphData({ nodes, links });
       setLoading(false);
@@ -133,11 +144,11 @@ const App: React.FC = () => {
         const query = searchTerm.toLowerCase();
         let queryStr = '';
         if (searchTypeFilter === 'all') {
-          queryStr = 'SELECT * FROM symbol WHERE string::lowercase(name) CONTAINS $q LIMIT 15; SELECT * FROM file WHERE string::lowercase(path) CONTAINS $q LIMIT 15;';
+          queryStr = 'SELECT id, name, path FROM symbol WHERE string::lowercase(name) CONTAINS $q LIMIT 15; SELECT id, path FROM file WHERE string::lowercase(path) CONTAINS $q LIMIT 15;';
         } else if (searchTypeFilter === 'file') {
-          queryStr = 'SELECT * FROM file WHERE string::lowercase(path) CONTAINS $q LIMIT 25;';
+          queryStr = 'SELECT id, path FROM file WHERE string::lowercase(path) CONTAINS $q LIMIT 25;';
         } else {
-          queryStr = 'SELECT * FROM symbol WHERE string::lowercase(name) CONTAINS $q LIMIT 25;';
+          queryStr = 'SELECT id, name, path FROM symbol WHERE string::lowercase(name) CONTAINS $q LIMIT 25;';
         }
 
         const res = await db.query<any[][]>(queryStr, { q: query });
@@ -235,55 +246,173 @@ const App: React.FC = () => {
 
   const [edgeStats, setEdgeStats] = useState<Record<string, { in: number, out: number }>>({});
 
+  const [relatedData, setRelatedData] = useState<{
+    symbols: Node[];
+    dependencies: Node[];
+    dependants: Node[];
+  }>({ symbols: [], dependencies: [], dependants: [] });
+  const [isLoadingRelated, setIsLoadingRelated] = useState(false);
+  const relatedReqRef = useRef(0);
+
   useEffect(() => {
-    if (!selectedNode || !db) return;
-    
-    const fetchStats = async () => {
+    if (!selectedNode || !db) {
+      setRelatedData({ symbols: [], dependencies: [], dependants: [] });
+      return;
+    }
+
+    const fetchRelated = async () => {
+      const rid = ++relatedReqRef.current;
+      setIsLoadingRelated(true);
+      console.log(`%c[Related] START fetch for ${selectedNode.id} (RID: ${rid})`, 'color: #3b82f6; font-weight: bold');
+      
       try {
-        const res = await db.query(
-          `SELECT count() as count, meta::tb(id) as type, 'out' as dir FROM (
-            SELECT id FROM contains, imports, exports, calls, implements, inherits, modifies, reads, references, depends_on WHERE in = type::record($id)
+        const start = performance.now();
+        // Use optimized graph traversal syntax (-> and <-) for significantly faster queries
+        const res = await db.query<any[][]>(`
+          // 0. Full details for the selected node
+          SELECT * FROM type::record($id);
+
+          // 1. Symbols in this file (Optimized Traversal)
+          SELECT id, name, path FROM symbol WHERE id IN (SELECT VALUE out FROM type::record($id)->contains);
+          
+          // 2. Outgoing dependencies (Optimized Traversal)
+          SELECT id, name, path FROM (SELECT VALUE out FROM type::record($id)->(imports, depends_on));
+          
+          // 3. Incoming dependants (Optimized Traversal)
+          SELECT id, name, path FROM (SELECT VALUE in FROM type::record($id)<-(imports, depends_on, contains));
+        `, { id: selectedNode.id });
+        const end = performance.now();
+        
+        console.log(`%c[Related] PRIMARY DATA DONE in ${(end - start).toFixed(1)}ms for ${selectedNode.id} (RID: ${rid})`, 'color: #10b981');
+
+        if (rid !== relatedReqRef.current) {
+          console.warn(`[Related] ABORT stale request ${rid}`);
+          return;
+        }
+
+        // Update selected node with full details
+        if (res[0]?.[0]) {
+          const fullNode = res[0][0];
+          setSelectedNode(prev => prev && prev.id === fullNode.id.toString() ? {
+            ...prev,
+            ...fullNode,
+            id: fullNode.id.toString()
+          } : prev);
+        }
+
+        const processNodes = (data: any[], type?: string) => (data || []).map(n => ({
+          ...n,
+          id: n.id.toString(),
+          type: type || (n.id.toString().startsWith('file:') ? 'file' : n.id.toString().startsWith('module:') ? 'module' : 'symbol'),
+          name: n.name || n.path?.split('/').pop() || n.id.toString(),
+          path: n.path
+        }));
+
+        setRelatedData({
+          symbols: processNodes(res[1], 'symbol'),
+          dependencies: processNodes(res[2]),
+          dependants: processNodes(res[3])
+        });
+
+        // Fetch Stats in a separate, non-blocking call to keep the UI snappy
+        db.query<any[][]>(`
+          SELECT count() as count, meta::tb(id) as type, 'out' as dir FROM (
+            SELECT id FROM type::record($id)->(contains, imports, calls, depends_on)
           ) GROUP BY type;
           SELECT count() as count, meta::tb(id) as type, 'in' as dir FROM (
-            SELECT id FROM contains, imports, exports, calls, implements, inherits, modifies, reads, references, depends_on WHERE out = type::record($id)
-          ) GROUP BY type;`,
-          { id: selectedNode.id }
-        );
-        
-        const stats: Record<string, { in: number, out: number }> = {};
-        
-        const processResults = (results: any[], dir: 'in' | 'out') => {
-          (results || []).forEach((r: any) => {
-            if (!stats[r.type]) stats[r.type] = { in: 0, out: 0 };
-            stats[r.type][dir] = r.count;
-          });
-        };
+            SELECT id FROM type::record($id)<-(contains, imports, calls, depends_on)
+          ) GROUP BY type;
+        `, { id: selectedNode.id }).then(statsRes => {
+          if (rid !== relatedReqRef.current) return;
+          const stats: Record<string, { in: number, out: number }> = {};
+          const processResults = (results: any[], dir: 'in' | 'out') => {
+            (results || []).forEach((r: any) => {
+              if (!stats[r.type]) stats[r.type] = { in: 0, out: 0 };
+              stats[r.type][dir] = r.count;
+            });
+          };
+          processResults(statsRes[0] || [], 'out');
+          processResults(statsRes[1] || [], 'in');
+          setEdgeStats(stats);
+          console.log(`%c[Related] STATS UPDATED for ${selectedNode.id}`, 'color: #10b981');
+        }).catch(err => console.error('[Related] Stats fetch failed:', err));
 
-        processResults((res as any)?.[0] || [], 'out');
-        processResults((res as any)?.[1] || [], 'in');
-        
-        setEdgeStats(stats);
+        console.log(`%c[Related] UI UPDATED for ${selectedNode.id}`, 'color: #6366f1');
       } catch (err) {
-        console.error('Failed to fetch edge stats:', err);
+        console.error(`[Related] ERROR for ${selectedNode.id}:`, err);
+      } finally {
+        if (rid === relatedReqRef.current) {
+          setIsLoadingRelated(false);
+        }
       }
     };
-    
-    fetchStats();
-  }, [selectedNode, db]);
+
+    fetchRelated();
+  }, [selectedNode?.id, db]);
 
   const handleNodeClick = (node: any) => {
-    // If node is not in current graph, we might need to fetch its neighborhood
-    // For now, just select it if it's in the graph
-    const existingNode = graphData.nodes.find(n => n.id === node.id);
-    if (existingNode) {
-      setSelectedNode(existingNode);
-      if (fgRef.current) {
-        fgRef.current.centerAt((existingNode as any).x ?? 0, (existingNode as any).y ?? 0, 1000);
-        fgRef.current.zoom(2, 1000);
+    const existingNode = graphData.nodes.find(n => n.id === (node.id || node));
+    const targetNode = existingNode || node;
+    
+    setSelectedNode(targetNode);
+    
+    if (fgRef.current) {
+      fgRef.current.centerAt((targetNode as any).x ?? 0, (targetNode as any).y ?? 0, 1000);
+      fgRef.current.zoom(2, 1000);
+    }
+  };
+
+  const addNodeToGraph = async (node: Node, linkToId?: string, linkType: string = 'contains') => {
+    setGraphData(prev => {
+      const exists = prev.nodes.find(n => n.id === node.id);
+      const newNodes = exists ? prev.nodes : [...prev.nodes, { 
+        ...node, 
+        val: node.type === 'symbol' ? 3 : 8,
+        color: node.type === 'symbol' ? '#a855f7' : node.type === 'file' ? '#6366f1' : '#10b981'
+      }];
+      
+      const newLinks = [...prev.links];
+      if (linkToId) {
+        const linkExists = prev.links.find(l => 
+          (typeof l.source === 'object' ? (l.source as any).id : l.source) === linkToId && 
+          (typeof l.target === 'object' ? (l.target as any).id : l.target) === node.id
+        );
+        if (!linkExists) {
+          newLinks.push({
+            id: `dynamic:${linkToId}:${node.id}`,
+            source: linkToId,
+            target: node.id,
+            type: linkType
+          });
+        }
       }
-    } else {
-      setSelectedNode(node);
-      // Optional: Add logic to fetch and add node to graph
+      
+      return { nodes: newNodes, links: newLinks };
+    });
+
+    // If it's a symbol, we might want to also fetch its edges (calls, etc)
+    if (node.type === 'symbol' && db) {
+      const edgeRes = await db.query<any[][]>(
+        'SELECT *, in as source, out as target FROM calls, references, implements WHERE in = type::record($id) OR out = type::record($id)',
+        { id: node.id }
+      );
+      const edges = (edgeRes[0] || []).map((e: any) => ({
+        id: e.id.toString(),
+        source: e.source.toString(),
+        target: e.target.toString(),
+        type: e.id.toString().split(':')[0]
+      }));
+      
+      setGraphData(prev => {
+        const nodeIds = new Set(prev.nodes.map(n => n.id));
+        const filteredEdges = edges.filter(e => nodeIds.has(e.source) && nodeIds.has(e.target));
+        const existingEdgeIds = new Set(prev.links.map(l => l.id));
+        
+        return {
+          ...prev,
+          links: [...prev.links, ...filteredEdges.filter(e => !existingEdgeIds.has(e.id))]
+        };
+      });
     }
   };
 
@@ -461,6 +590,12 @@ const App: React.FC = () => {
                   >
                     <span className="node-dot symbol"></span> Symbol
                   </div>
+                  <div 
+                    className={`legend-item filterable ${(filters.nodes as any).module ? 'active' : ''}`}
+                    onClick={() => toggleFilter('nodes', 'module')}
+                  >
+                    <span className="node-dot module"></span> Folder/Module
+                  </div>
                 </div>
                 <div className="legend-group">
                   <h5>Edges</h5>
@@ -468,11 +603,12 @@ const App: React.FC = () => {
                     { id: 'calls', label: 'Calls', color: 'calls' },
                     { id: 'contains', label: 'Contains', color: 'contains' },
                     { id: 'imports', label: 'Imports', color: 'imports' },
-                    { id: 'implements', label: 'Implements', color: 'implements' }
+                    { id: 'implements', label: 'Implements', color: 'implements' },
+                    { id: 'depends_on', label: 'Depends On', color: 'depends_on' }
                   ].map(edge => (
                     <div 
                       key={edge.id}
-                      className={`legend-item filterable ${filters.edges[edge.id as keyof typeof filters.edges] ? 'active' : ''}`}
+                      className={`legend-item filterable ${(filters.edges as any)[edge.id] ? 'active' : ''}`}
                       onClick={() => toggleFilter('edges', edge.id)}
                     >
                       <span className={`edge-line ${edge.color}`}></span> {edge.label}
@@ -586,6 +722,61 @@ const App: React.FC = () => {
                     }}>
                       <Maximize size={16} /> Isolate Context
                     </button>
+                  </div>
+                </div>
+
+                <div className={`related-sections ${isLoadingRelated ? 'loading' : ''}`}>
+                  <div className="related-group">
+                    <div className="group-header">
+                      <label>SYMBOLS ({relatedData.symbols.length})</label>
+                      <Info size={12} title="Click to add symbol to graph" />
+                    </div>
+                    <div className="item-grid">
+                      {relatedData.symbols.map(s => (
+                        <div key={s.id} className="item-tag symbol" onClick={() => addNodeToGraph(s, selectedNode.id)}>
+                          <Zap size={10} /> {s.name}
+                        </div>
+                      ))}
+                      {!isLoadingRelated && relatedData.symbols.length === 0 && <div className="empty-hint">No symbols indexed</div>}
+                    </div>
+                  </div>
+
+                  <div className="related-group">
+                    <label>DEPENDS ON ({relatedData.dependencies.length})</label>
+                    <div className="item-list">
+                      {relatedData.dependencies.map(d => (
+                        <div key={d.id} className="item-row" onClick={() => handleNodeClick(d)}>
+                          <div className={`row-icon ${d.type}`}>
+                            {d.type === 'file' ? <FileCode size={12} /> : <Activity size={12} />}
+                          </div>
+                          <div className="row-info">
+                            <div className="row-name">{d.name}</div>
+                            <div className="row-path">{d.path}</div>
+                          </div>
+                          <ChevronRight size={12} />
+                        </div>
+                      ))}
+                      {!isLoadingRelated && relatedData.dependencies.length === 0 && <div className="empty-hint">No outgoing dependencies</div>}
+                    </div>
+                  </div>
+
+                  <div className="related-group">
+                    <label>USED BY ({relatedData.dependants.length})</label>
+                    <div className="item-list">
+                      {relatedData.dependants.map(d => (
+                        <div key={d.id} className="item-row" onClick={() => handleNodeClick(d)}>
+                          <div className={`row-icon ${d.type}`}>
+                            {d.type === 'file' ? <FileCode size={12} /> : <Activity size={12} />}
+                          </div>
+                          <div className="row-info">
+                            <div className="row-name">{d.name}</div>
+                            <div className="row-path">{d.path}</div>
+                          </div>
+                          <ChevronRight size={12} />
+                        </div>
+                      ))}
+                      {!isLoadingRelated && relatedData.dependants.length === 0 && <div className="empty-hint">No incoming dependants</div>}
+                    </div>
                   </div>
                 </div>
 
