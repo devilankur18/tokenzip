@@ -5,12 +5,12 @@
 **The Semantic Compression Layer for AI Agents.**  
 Transform any codebase into a queryable knowledge graph and stop wasting tokens on implementation details.
 
-![TokenZip Hero Comparison](https://raw.githubusercontent.com/ankur/tokenzip/main/assets/hero_comparison.png)
+![TokenZip Hero Comparison](https://raw.githubusercontent.com/devilankur18/tokenzip/main/assets/hero_comparison.png)
 
 [![npm version](https://img.shields.io/npm/v/tokenzip.svg)](https://www.npmjs.com/package/tokenzip)
 [![Node.js >= 18](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg)](https://nodejs.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Build Status](https://img.shields.io/github/actions/workflow/status/ankur/tokenzip/ci.yml?branch=main)](https://github.com/ankur/tokenzip/actions)
+[![Build Status](https://img.shields.io/github/actions/workflow/status/devilankur18/tokenzip/ci.yml?branch=main)](https://github.com/devilankur18/tokenzip/actions)
 
 </div>
 
@@ -135,7 +135,7 @@ For a deep dive into how the "Memory Mesh" works, see our [Architecture Guide](d
 
 ## ⚡ Quick Start (Zero to Running in 30s)
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ankur/tokenzip/blob/main/notebooks/tokenzip_demo.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/devilankur18/tokenzip/blob/main/notebooks/tokenzip_demo.ipynb)
 
 ### 1. Install
 ```bash

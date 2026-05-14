@@ -4,10 +4,10 @@
   "description": "TokenZip — Reduce AI coding token costs by 90% with a persistent, queryable code intelligence graph that gives agents deep repo awareness across files, symbols, dependencies, and docs.",
   "license": "MIT",
   "author": "Ankur Agarwal",
-  "homepage": "https://github.com/ankur/tokenzip",
+  "homepage": "https://github.com/devilankur18/tokenzip",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ankur/tokenzip.git"
+    "url": "git+https://github.com/devilankur18/tokenzip.git"
   },
   "keywords": [
     "mcp",
