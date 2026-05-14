@@ -20,14 +20,15 @@ import {
 import './App.css';
 
 interface Node {
-  id: string;
-  type: string;
-  name: string;
   path?: string;
   signature?: string;
   docs?: string;
   val: number;
   color?: string;
+  sizeBytes?: number;
+  lineCount?: number;
+  outDegree?: number;
+  hasMemory?: boolean;
 }
 
 interface Edge {
@@ -58,7 +59,17 @@ const App: React.FC = () => {
   const [noteForm, setNoteForm] = useState<{ id: string | null, title: string, summary: string, category: string, priority: string }>({ 
     id: null, title: '', summary: '', category: 'guideline', priority: 'normal' 
   });
+  const [pathfindingMode, setPathfindingMode] = useState<{ active: boolean, start: string | null, end: string | null }>({
+    active: false, start: null, end: null
+  });
+  const [highlightedPath, setHighlightedPath] = useState<Set<string>>(new Set());
+  const [cycleNodes, setCycleNodes] = useState<Set<string>>(new Set());
+
   const [refreshKey, setRefreshKey] = useState(0);
+  const [viewMode, setViewMode] = useState<'normal' | 'tokens' | 'complexity'>('normal');
+  const [isRecordingPath, setIsRecordingPath] = useState(false);
+  const [recordedPath, setRecordedPath] = useState<string[]>([]);
+  
   const triggerRefresh = () => setRefreshKey(k => k + 1);
 
   const urlParams = new URLSearchParams(window.location.search);
@@ -94,7 +105,7 @@ const App: React.FC = () => {
 
       // Progressive Loading: Load files, modules and their architectural relationships
       const res = await surreal.query<any[][]>(`
-        SELECT id, path, count(->tagged_with) > 0 AS has_memory FROM file LIMIT 5000;
+        SELECT id, path, size_bytes, line_count, count(->tagged_with) > 0 AS has_memory FROM file LIMIT 5000;
         SELECT id, name, path, count(->tagged_with) > 0 AS has_memory FROM module LIMIT 1000;
         SELECT id, in as source, out as target FROM imports, exports, depends_on, contains LIMIT 50000;
         SELECT name, path FROM repository LIMIT 1;
@@ -107,12 +118,13 @@ const App: React.FC = () => {
 
       if (repo) setRepoInfo(repo);
 
-      const nodes: Node[] = [
         ...files.map((n: any) => ({
           id: n.id.toString(),
           type: 'file',
           name: n.path.split('/').pop() || n.path,
           path: n.path,
+          sizeBytes: n.size_bytes,
+          lineCount: n.line_count,
           val: 8,
           color: '#6366f1',
           hasMemory: n.has_memory
@@ -138,7 +150,22 @@ const App: React.FC = () => {
         }))
         .filter(l => nodeIds.has(l.source) && nodeIds.has(l.target));
 
-      setGraphData({ nodes, links });
+      // US.3: Dependency Heatmap - Calculate In-Degree
+      // US.8: Complexity Overlay - Calculate Out-Degree
+      const inDegreeMap: Record<string, number> = {};
+      const outDegreeMap: Record<string, number> = {};
+      links.forEach(l => {
+        inDegreeMap[l.target] = (inDegreeMap[l.target] || 0) + 1;
+        outDegreeMap[l.source] = (outDegreeMap[l.source] || 0) + 1;
+      });
+
+      const scaledNodes = nodes.map(n => ({
+        ...n,
+        outDegree: outDegreeMap[n.id] || 0,
+        val: n.type === 'module' ? 14 : (8 + (inDegreeMap[n.id] || 0) * 1.5)
+      }));
+
+      setGraphData({ nodes: scaledNodes, links });
       setError(null);
       setLoading(false);
     } catch (err: any) {
@@ -336,15 +363,34 @@ const App: React.FC = () => {
 
         let annotations: any[] = [];
         try {
+          // US.1: Inherited Knowledge - Resolve parent scopes
+          const parentPaths: string[] = ['codebase'];
+          if (selectedNode.path) {
+            const parts = selectedNode.path.split('/');
+            for (let i = 1; i <= parts.length; i++) {
+              parentPaths.push(parts.slice(0, i).join('/'));
+            }
+          }
+
           const annRes = await db.query<any[][]>(`
-            SELECT id, category, title, summary, priority, target_hash FROM annotation 
+            SELECT id, category, title, summary, priority, target_hash, author,
+              (SELECT VALUE out FROM scoped_to)[0].path as scope_path
+            FROM annotation 
             WHERE is_active = true 
-              AND count(->scoped_to->(file, module, repository, symbol)[WHERE id = type::record($id)]) > 0
+              AND (
+                count(->scoped_to->(file, module, repository, symbol)[WHERE id = type::record($id)]) > 0
+                OR
+                count(->scoped_to->(file, module, repository, symbol)[WHERE path IN $parents]) > 0
+              )
             ORDER BY priority DESC;
-          `, { id: selectedNode.id });
-          annotations = annRes[0] || [];
+          `, { id: selectedNode.id, parents: parentPaths });
+          
+          annotations = (annRes[0] || []).map(a => ({
+            ...a,
+            isInherited: a.scope_path !== selectedNode.path && a.scope_path !== 'codebase' && !selectedNode.id.includes(a.scope_path)
+          }));
         } catch (e: any) {
-          // Table might not exist yet
+          console.error('Annotation query failed:', e);
         }
 
         setRelatedData({
@@ -391,14 +437,106 @@ const App: React.FC = () => {
   }, [selectedNode?.id, db, refreshKey]);
 
   const handleNodeClick = (node: any) => {
-    const existingNode = graphData.nodes.find(n => n.id === (node.id || node));
+    const nodeId = node.id || node;
+    const existingNode = graphData.nodes.find(n => n.id === nodeId);
     const targetNode = existingNode || node;
     
+    // US.7: Visual Traversal Planning
+    if (isRecordingPath) {
+      setRecordedPath(prev => prev.includes(nodeId) ? prev : [...prev, nodeId]);
+      return;
+    }
+
+    if (pathfindingMode.active) {
+      if (!pathfindingMode.start) {
+        setPathfindingMode(prev => ({ ...prev, start: nodeId }));
+      } else if (!pathfindingMode.end && nodeId !== pathfindingMode.start) {
+        const endId = nodeId;
+        setPathfindingMode(prev => ({ ...prev, end: endId }));
+        calculatePath(pathfindingMode.start, endId);
+      } else {
+        setPathfindingMode({ active: true, start: nodeId, end: null });
+        setHighlightedPath(new Set());
+      }
+      return;
+    }
+
     setSelectedNode(targetNode);
     
     if (fgRef.current) {
       fgRef.current.centerAt((targetNode as any).x ?? 0, (targetNode as any).y ?? 0, 1000);
       fgRef.current.zoom(2, 1000);
+    }
+  };
+
+  const calculatePath = (startId: string, endId: string) => {
+    const queue: [string, string[]][] = [[startId, [startId]]];
+    const visited = new Set<string>([startId]);
+    
+    while (queue.length > 0) {
+      const [currId, path] = queue.shift()!;
+      if (currId === endId) {
+        setHighlightedPath(new Set(path));
+        return;
+      }
+      
+      const neighbors = graphData.links
+        .filter(l => (typeof l.source === 'object' ? (l.source as any).id : l.source) === currId)
+        .map(l => (typeof l.target === 'object' ? (l.target as any).id : l.target));
+        
+      for (const next of neighbors) {
+        if (!visited.has(next)) {
+          visited.add(next);
+          queue.push([next, [...path, next]]);
+        }
+      }
+    }
+    alert('No path found between these nodes.');
+    setPathfindingMode({ active: true, start: null, end: null });
+  };
+
+  const runCycleDetection = () => {
+    const visited = new Set<string>();
+    const recStack = new Set<string>();
+    const cycles = new Set<string>();
+    const adj: Record<string, string[]> = {};
+
+    graphData.links.forEach(l => {
+      const s = typeof l.source === 'object' ? (l.source as any).id : l.source;
+      const t = typeof l.target === 'object' ? (l.target as any).id : l.target;
+      if (!adj[s]) adj[s] = [];
+      adj[s].push(t);
+    });
+
+    const dfs = (u: string, path: string[]) => {
+      visited.add(u);
+      recStack.add(u);
+      path.push(u);
+
+      (adj[u] || []).forEach(v => {
+        if (!visited.has(v)) {
+          dfs(v, [...path]);
+        } else if (recStack.has(v)) {
+          // Cycle found
+          const cycleIdx = path.indexOf(v);
+          if (cycleIdx !== -1) {
+            path.slice(cycleIdx).forEach(n => cycles.add(n));
+          }
+        }
+      });
+
+      recStack.delete(u);
+    };
+
+    graphData.nodes.forEach(n => {
+      if (!visited.has(n.id)) dfs(n.id, []);
+    });
+
+    setCycleNodes(cycles);
+    if (cycles.size > 0) {
+      alert(`Detected ${cycles.size} nodes involved in circular dependencies.`);
+    } else {
+      alert('No circular dependencies detected in the current graph.');
     }
   };
 
@@ -674,6 +812,25 @@ const App: React.FC = () => {
             graphData={visibleData}
             nodeLabel={(node: any) => `${node.type}: ${node.name}`}
             nodeColor={(node: any) => {
+              if (highlightedPath.has(node.id)) return '#facc15'; // Yellow for path
+              if (cycleNodes.has(node.id)) return '#ef4444'; // Red for cycles
+              if (isRecordingPath && recordedPath.includes(node.id)) return '#3b82f6';
+              
+              if (viewMode === 'tokens') {
+                const weight = Math.min(1, (node.sizeBytes || 0) / 50000); // Scale by 50KB
+                return `rgb(${Math.floor(weight * 255)}, ${Math.floor((1 - weight) * 200)}, 100)`;
+              }
+              if (viewMode === 'complexity') {
+                const weight = Math.min(1, (node.outDegree || 0) / 10); // Scale by 10 deps
+                return `rgb(${Math.floor(weight * 255)}, 100, ${Math.floor((1 - weight) * 255)})`;
+              }
+
+              if (pathfindingMode.active) {
+                if (node.id === pathfindingMode.start) return '#10b981';
+                if (node.id === pathfindingMode.end) return '#facc15';
+                return 'rgba(255, 255, 255, 0.05)';
+              }
+
               if (!selectedNode) return node.color;
               const isSelected = node.id === selectedNode.id;
               const isConnected = graphData.links.some(l => {
@@ -728,16 +885,20 @@ const App: React.FC = () => {
             onNodeClick={handleNodeClick}
             backgroundColor="#0d0d12"
             linkColor={(link: any) => {
-              const base = getLinkColor(link);
-              if (!selectedNode) return base;
               const sId = typeof link.source === 'object' ? (link.source as any).id : link.source;
               const tId = typeof link.target === 'object' ? (link.target as any).id : link.target;
+              
+              if (highlightedPath.has(sId) && highlightedPath.has(tId)) return '#facc15';
+              
+              const base = getLinkColor(link);
+              if (!selectedNode) return base;
               const isRelevant = sId === selectedNode.id || tId === selectedNode.id;
               return isRelevant ? base : '#ffffff08';
             }}
             linkWidth={(link: any) => {
               const sId = typeof link.source === 'object' ? (link.source as any).id : link.source;
               const tId = typeof link.target === 'object' ? (link.target as any).id : link.target;
+              if (highlightedPath.has(sId) && highlightedPath.has(tId)) return 4;
               return (selectedNode && (sId === selectedNode.id || tId === selectedNode.id)) ? 2 : 1;
             }}
           />
@@ -816,6 +977,62 @@ const App: React.FC = () => {
                     </div>
                   ))}
                 </div>
+
+                <div className="legend-group">
+                  <h5>Visual Overlays</h5>
+                  <div className="view-mode-selector">
+                    <button className={viewMode === 'normal' ? 'active' : ''} onClick={() => setViewMode('normal')}>Default</button>
+                    <button className={viewMode === 'tokens' ? 'active' : ''} onClick={() => setViewMode('tokens')}>Token Weight</button>
+                    <button className={viewMode === 'complexity' ? 'active' : ''} onClick={() => setViewMode('complexity')}>Complexity</button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="tools-section" style={{ marginTop: '24px' }}>
+                <h4>ARCHITECTURAL TOOLS</h4>
+                <div className="action-buttons" style={{ gridTemplateColumns: '1fr' }}>
+                  <button 
+                    className={`action-btn ${pathfindingMode.active ? 'primary' : 'secondary'}`}
+                    onClick={() => {
+                      setPathfindingMode(prev => ({ active: !prev.active, start: null, end: null }));
+                      setHighlightedPath(new Set());
+                    }}
+                  >
+                    <Search size={16} /> {pathfindingMode.active ? 'Exit Pathfinding' : 'Find Path (A → B)'}
+                  </button>
+                  <button className="action-btn secondary" onClick={runCycleDetection}>
+                    <Activity size={16} /> Detect Circular Dependencies
+                  </button>
+                  <button 
+                    className={`action-btn ${isRecordingPath ? 'primary' : 'secondary'}`}
+                    onClick={() => {
+                      if (isRecordingPath && recordedPath.length > 0) {
+                        setNoteForm({ 
+                          id: null, 
+                          title: 'Traversal Narrative', 
+                          summary: 'Suggested reading order: ' + recordedPath.map(id => id.split(':').pop()).join(' -> '), 
+                          category: 'traversal_hint', 
+                          priority: 'normal' 
+                        });
+                        setIsNoteModalOpen(true);
+                      }
+                      setIsRecordingPath(!isRecordingPath);
+                      if (!isRecordingPath) setRecordedPath([]);
+                    }}
+                  >
+                    <BookOpen size={16} /> {isRecordingPath ? 'Stop & Save Traversal' : 'Record Narrative Traversal'}
+                  </button>
+                </div>
+                {isRecordingPath && (
+                  <div className="recording-status" style={{ marginTop: '12px', fontSize: '0.75rem', color: '#6366f1', background: 'rgba(99,102,241,0.1)', padding: '10px', borderRadius: '8px', border: '1px solid rgba(99,102,241,0.2)' }}>
+                    Recording Path: {recordedPath.length} steps. Click nodes to add.
+                  </div>
+                )}
+                {pathfindingMode.active && (
+                  <div className="pathfinding-hint" style={{ marginTop: '12px', fontSize: '0.75rem', color: '#fbbf24', background: 'rgba(251,191,36,0.1)', padding: '10px', borderRadius: '8px', border: '1px solid rgba(251,191,36,0.2)' }}>
+                    {!pathfindingMode.start ? 'Select starting node...' : !pathfindingMode.end ? `From: ${pathfindingMode.start}. Select target node...` : 'Path highlighted. Click anywhere to reset.'}
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -944,13 +1161,15 @@ const App: React.FC = () => {
                         <label>CONTEXT MEMORY ({relatedData.annotations.length})</label>
                       </div>
                       <div className="item-list">
-                         {relatedData.annotations.map(ann => (
-                          <div key={ann.id.toString()} className="item-row memory-note" style={{ position: 'relative' }}>
+                          {relatedData.annotations.map(ann => (
+                          <div key={ann.id.toString()} className={`item-row memory-note ${ann.isInherited ? 'inherited' : ''}`} style={{ position: 'relative' }}>
                             <div className="row-info" style={{ flex: 1 }}>
-                              <div className="row-name" style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                              <div className="row-name" style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
                                 <span className={`priority-badge ${ann.priority}`} style={{ fontSize: '0.65rem', padding: '2px 6px', borderRadius: '4px', background: 'rgba(255,255,255,0.1)' }}>{ann.priority}</span>
+                                <span className={`author-badge ${ann.author || 'human'}`}>{ann.author || 'human'}</span>
                                 <span className="category-badge" style={{ fontSize: '0.65rem', color: '#a855f7' }}>{ann.category}</span>
-                                <strong style={{ color: '#fff' }}>{ann.title}</strong>
+                                {ann.isInherited && <span className="inherited-badge" style={{ fontSize: '0.6rem', color: 'rgba(255,255,255,0.4)', fontStyle: 'italic' }}>inherited from {ann.scope_path}</span>}
+                                <strong style={{ color: '#fff', width: '100%' }}>{ann.title}</strong>
                               </div>
                               <div className="row-path" style={{ marginTop: '4px', color: '#9ca3af' }}>{ann.summary}</div>
                             </div>

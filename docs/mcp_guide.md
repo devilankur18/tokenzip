@@ -38,8 +38,21 @@ Add TokenZip to your Claude Desktop configuration (usually at `~/Library/Applica
 | `smart_file_read` | Read semantic file projections (Skeleton, Interface, etc.) to save tokens. |
 | `query_symbol` | Find where a symbol is defined and get its full signature. |
 | `find_references` | Find all callers, implementations, or users of a specific symbol. |
+| `find_implementations` | Find all implementations of a specific interface or class. |
+| `get_call_hierarchy` | Retrieve both incoming (callers) and outgoing (callees) for a symbol. |
+| `get_context_bundle` | Fetch a symbol's implementation plus signatures of all its dependencies. |
+| `search_codebase` | Regex search across the entire codebase. |
+| `fuzzy_find_symbol` | Fuzzy search for symbol names. |
+| `get_file_symbols` | List all symbols (functions, classes, etc.) in a specific file. |
+| `get_dependencies` | Get the import dependencies for a specific file. |
 | `get_codebase_stats` | Overview of files, symbols, and knowledge graph density. |
 | `get_token_savings` | View ROI and efficiency metrics for the current session. |
+| `cortex_save` | Save a persistent note (guideline, gotcha) to the graph. |
+| `cortex_recall` | Retrieve relevant notes for a specific file or module. |
+| `cortex_search` | Search for notes across the entire codebase. |
+| `cortex_traverse` | Get an optimized reading order for a module or feature. |
+| `cortex_suggest` | Log an improvement suggestion for the tool developer. |
+
 
 ## Tool Reference & Example Outputs
 
@@ -99,6 +112,24 @@ import { IStore } from '../storage/interface.js';
 
 export async function createMcpServer(store: IStore, repoPath: string) {
     /* [body truncated to save tokens] */
+}
+```
+
+### 5. Cortex Memory (Persistent Knowledge)
+Cortex allows agents to save and recall architectural knowledge, guidelines, and "gotchas" directly in the code graph.
+
+- **`cortex_save`**: Use this when you discover something important about the codebase (e.g., "The auth logic is spread across these 3 files", "Never call this function directly").
+- **`cortex_recall`**: Automatically triggered by `get_code_overview` and `smart_file_read`, but can be called manually to fetch all known notes for a path.
+- **`cortex_traverse`**: Generates a "reading plan" for a module based on stored hints and dependency analysis.
+
+```json
+// Example cortex_save call
+{
+  "category": "architecture",
+  "title": "Data Flow Pattern",
+  "summary": "Services must never call repositories directly; use the Orchestrator layer.",
+  "scope": "module",
+  "targets": ["src/services"]
 }
 ```
 

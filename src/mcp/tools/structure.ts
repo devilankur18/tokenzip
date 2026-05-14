@@ -568,7 +568,7 @@ export function createStructureTools(store: IStore, repoPath: string, budget: To
           const symbolRes = await store.query<any[]>(`
             SELECT name, kind, signature, docstring, 
                    (SELECT path FROM file WHERE id = $parent.fileId)[0].path as filePath 
-            FROM symbol WHERE name = $name AND isExported = true
+            FROM symbol WHERE name = $name
           `, { name: target });
           
           if (symbolRes.length > 0) {
