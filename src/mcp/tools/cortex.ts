@@ -28,11 +28,11 @@ export async function injectCortex(filePath: string, store: IStore, budget: Toke
       LIMIT 5
     `;
 
-    const notes = await store.query<any>(query, { paths });
+    const notes = await store.query<any>(query, { paths }) || [];
     if (notes.length === 0) return undefined;
 
     // Check for staleness against current file
-    const fileRes = await store.query<any>('SELECT content_hash FROM file WHERE path = $path LIMIT 1', { path: filePath });
+    const fileRes = await store.query<any>('SELECT content_hash FROM file WHERE path = $path LIMIT 1', { path: filePath }) || [];
     const currentHash = fileRes[0]?.content_hash;
 
     const formattedNotes = notes.map((n: any) => {
@@ -101,7 +101,7 @@ export function createCortexTools(store: IStore, repoPath: string, budget: Token
           // 1. Get current content hash if targets include files
           let targetHash: string | undefined;
           if (args.scope === 'file' && args.targets.length > 0) {
-            const fileRes = await store.query<any>('SELECT content_hash FROM file WHERE path = $path LIMIT 1', { path: args.targets[0] });
+            const fileRes = await store.query<any>('SELECT content_hash FROM file WHERE path = $path LIMIT 1', { path: args.targets[0] }) || [];
             if (fileRes.length > 0) targetHash = fileRes[0].content_hash;
           }
 
@@ -139,14 +139,14 @@ export function createCortexTools(store: IStore, repoPath: string, budget: Token
               const repos = await store.query<any>('SELECT id FROM repository LIMIT 1');
               if (repos.length > 0) targetId = repos[0].id;
             } else if (args.scope === 'module') {
-              const modRes = await store.query<any>('SELECT id FROM module WHERE path = $path LIMIT 1', { path: target });
+              const modRes = await store.query<any>('SELECT id FROM module WHERE path = $path LIMIT 1', { path: target }) || [];
               targetId = modRes[0]?.id;
             } else if (args.scope === 'file') {
-              const fileRes = await store.query<any>('SELECT id, content_hash FROM file WHERE path = $path LIMIT 1', { path: target });
+              const fileRes = await store.query<any>('SELECT id, content_hash FROM file WHERE path = $path LIMIT 1', { path: target }) || [];
               targetId = fileRes[0]?.id;
               if (fileRes[0]?.content_hash) targetHash = fileRes[0].content_hash;
             } else if (args.scope === 'symbol') {
-              const symRes = await store.query<any>('SELECT id FROM symbol WHERE name = $name LIMIT 1', { name: target });
+              const symRes = await store.query<any>('SELECT id FROM symbol WHERE name = $name LIMIT 1', { name: target }) || [];
               targetId = symRes[0]?.id;
             }
 
@@ -211,14 +211,14 @@ export function createCortexTools(store: IStore, repoPath: string, budget: Token
             ORDER BY priority DESC, confidence DESC
           `;
 
-          const notes = await store.query<any>(query, { paths, categories });
+          const notes = await store.query<any>(query, { paths, categories }) || [];
 
           // 3. Process staleness and update access count
           const processedNotes = [];
           for (const note of notes) {
             let stalenessNote = '';
             if (note.target_hash) {
-              const fileRes = await store.query<any>('SELECT content_hash FROM file WHERE path = $target LIMIT 1', { target });
+              const fileRes = await store.query<any>('SELECT content_hash FROM file WHERE path = $target LIMIT 1', { target }) || [];
               if (fileRes.length > 0 && fileRes[0].content_hash !== note.target_hash) {
                 stalenessNote = ' [⚠️ STALE]';
               }
@@ -282,7 +282,7 @@ export function createCortexTools(store: IStore, repoPath: string, budget: Token
 
           q += ' LIMIT $limit';
 
-          const results = await store.query<any>(q, vars);
+          const results = await store.query<any>(q, vars) || [];
           const response = budget.truncate({ query, results });
 
           return {
@@ -353,7 +353,7 @@ export function createCortexTools(store: IStore, repoPath: string, budget: Token
           if (args.related_targets) {
             for (const target of args.related_targets) {
               // Try to find target ID
-              const res = await store.query<any>('SELECT id FROM file, module, symbol, repository WHERE path = $target OR name = $target LIMIT 1', { target });
+              const res = await store.query<any>('SELECT id FROM file, module, symbol, repository WHERE path = $target OR name = $target LIMIT 1', { target }) || [];
               if (res.length > 0) {
                 await store.query('RELATE $sug->relates_to->$target', { sug: suggestion.id, target: res[0].id });
               }
@@ -395,7 +395,7 @@ export function createCortexTools(store: IStore, repoPath: string, budget: Token
             ORDER BY access_count DESC
             LIMIT 1
           `;
-          const hints = await store.query<any>(hintQuery, { target });
+          const hints = await store.query<any>(hintQuery, { target }) || [];
 
           if (hints.length > 0) {
             const hint = hints[0];
@@ -416,7 +416,7 @@ export function createCortexTools(store: IStore, repoPath: string, budget: Token
           }
 
           // 2. Graph fallback: Find entry points and 1st level deps
-          const modRes = await store.query<any>('SELECT id FROM module WHERE path = $target LIMIT 1', { target });
+          const modRes = await store.query<any>('SELECT id FROM module WHERE path = $target LIMIT 1', { target }) || [];
           if (modRes.length === 0) {
              return { content: [{ type: 'text', text: `Module ${target} not found.` }], isError: true };
           }
@@ -429,7 +429,7 @@ export function createCortexTools(store: IStore, repoPath: string, budget: Token
             ORDER BY incoming_deps ASC
             LIMIT 10
           `;
-          const files = await store.query<any>(filesQuery, { moduleId });
+          const files = await store.query<any>(filesQuery, { moduleId }) || [];
 
           const plan = {
             source: 'graph_analysis',

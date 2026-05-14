@@ -2,24 +2,15 @@
 
 exports[`MCP Enrichment Tests (Express.js Bench) > get_call_hierarchy for "createApplication" 1`] = `
 {
-  "_token_count": 65,
+  "_token_count": 38,
   "_truncated": false,
   "incoming": [],
   "outgoing": [
     {
-      "id": "symbol:17c1ca7f_app_init_method_59",
-      "kind": "method",
-      "name": "app.init",
-    },
-    {
-      "id": "symbol:17c1ca7f_app_handle_method_152",
+      "filePath": "lib/application.js",
+      "id": "symbol:17c1ca7f_app_handle_method_10",
       "kind": "method",
       "name": "app.handle",
-    },
-    {
-      "id": "symbol:d4499403_mixin_variable_17",
-      "kind": "variable",
-      "name": "mixin",
     },
   ],
   "symbol": "createApplication",
@@ -28,23 +19,13 @@ exports[`MCP Enrichment Tests (Express.js Bench) > get_call_hierarchy for "creat
 
 exports[`MCP Enrichment Tests (Express.js Bench) > get_context_bundle for "createApplication" 1`] = `
 {
-  "_token_count": 213,
+  "_token_count": 75,
   "_truncated": false,
   "dependencies": [
     {
       "kind": "method",
-      "name": "app.init",
-      "signature": "app.init = function init()",
-    },
-    {
-      "kind": "method",
       "name": "app.handle",
       "signature": "app.handle = function handle(req, res, callback)",
-    },
-    {
-      "kind": "variable",
-      "name": "mixin",
-      "signature": "var mixin = require('merge-descriptors');",
     },
   ],
   "target": {
@@ -52,21 +33,6 @@ exports[`MCP Enrichment Tests (Express.js Bench) > get_context_bundle for "creat
   var app = function(req, res, next) {
     app.handle(req, res, next);
   };
-
-  mixin(app, EventEmitter.prototype, false);
-  mixin(app, proto, false);
-
-  // expose the prototype that will get set on requests
-  app.request = Object.create(req, {
-    app: { configurable: true, enumerable: true, writable: true, value: app }
-  })
-
-  // expose the prototype that will get set on responses
-  app.response = Object.create(res, {
-    app: { configurable: true, enumerable: true, writable: true, value: app }
-  })
-
-  app.init();
   return app;
 }",
     "filePath": "lib/express.js",
@@ -78,45 +44,15 @@ exports[`MCP Enrichment Tests (Express.js Bench) > get_context_bundle for "creat
 
 exports[`MCP Enrichment Tests (Express.js Bench) > get_file_symbols for lib/express.js 1`] = `
 {
-  "_token_count": 562,
+  "_token_count": 276,
   "_truncated": false,
   "file": "lib/express.js",
   "symbols": [
     {
-      "endCol": 55,
-      "endLine": 16,
-      "fileId": "file:lib_express_js",
-      "id": "symbol:d4499403_EventEmitter_variable_16",
-      "isExported": false,
-      "kind": "variable",
-      "metadata": {},
-      "modifiers": [],
-      "name": "EventEmitter",
-      "signature": "var EventEmitter = require('node:events').EventEmitter;",
-      "startCol": 0,
-      "startLine": 16,
-      "type": "symbol",
-    },
-    {
-      "endCol": 31,
-      "endLine": 19,
-      "fileId": "file:lib_express_js",
-      "id": "symbol:d4499403_Router_variable_19",
-      "isExported": false,
-      "kind": "variable",
-      "metadata": {},
-      "modifiers": [],
-      "name": "Router",
-      "signature": "var Router = require('router');",
-      "startCol": 0,
-      "startLine": 19,
-      "type": "symbol",
-    },
-    {
       "endCol": 4,
-      "endLine": 39,
+      "endLine": 15,
       "fileId": "file:lib_express_js",
-      "id": "symbol:d4499403_app_function_37",
+      "id": "symbol:d4499403_app_function_13",
       "isExported": false,
       "kind": "function",
       "metadata": {},
@@ -124,29 +60,35 @@ exports[`MCP Enrichment Tests (Express.js Bench) > get_file_symbols for lib/expr
       "name": "app",
       "signature": "var app = function(req, res, next)",
       "startCol": 2,
-      "startLine": 37,
+      "startLine": 13,
       "type": "symbol",
     },
     {
-      "endCol": 39,
-      "endLine": 15,
+      "endCol": 40,
+      "endLine": 2,
       "fileId": "file:lib_express_js",
-      "id": "symbol:d4499403_bodyParser_variable_15",
+      "id": "symbol:d4499403_bodyParser_variable_2",
       "isExported": false,
       "kind": "variable",
       "metadata": {},
       "modifiers": [],
       "name": "bodyParser",
-      "signature": "var bodyParser = require('body-parser')",
+      "signature": "var bodyParser = require('body-parser');",
       "startCol": 0,
-      "startLine": 15,
+      "startLine": 2,
       "type": "symbol",
     },
     {
+      "docstring": "/**
+ * Create an express application.
+ *
+ * @return {Function}
+ * @api public
+ */",
       "endCol": 1,
-      "endLine": 56,
+      "endLine": 17,
       "fileId": "file:lib_express_js",
-      "id": "symbol:d4499403_createApplication_function_36",
+      "id": "symbol:d4499403_createApplication_function_12",
       "isExported": false,
       "kind": "function",
       "metadata": {},
@@ -154,67 +96,22 @@ exports[`MCP Enrichment Tests (Express.js Bench) > get_file_symbols for lib/expr
       "name": "createApplication",
       "signature": "function createApplication()",
       "startCol": 0,
-      "startLine": 36,
+      "startLine": 12,
       "type": "symbol",
     },
     {
-      "endCol": 41,
-      "endLine": 17,
+      "endCol": 33,
+      "endLine": 3,
       "fileId": "file:lib_express_js",
-      "id": "symbol:d4499403_mixin_variable_17",
+      "id": "symbol:d4499403_router_variable_3",
       "isExported": false,
       "kind": "variable",
       "metadata": {},
       "modifiers": [],
-      "name": "mixin",
-      "signature": "var mixin = require('merge-descriptors');",
+      "name": "router",
+      "signature": "var router = require('./router');",
       "startCol": 0,
-      "startLine": 17,
-      "type": "symbol",
-    },
-    {
-      "endCol": 37,
-      "endLine": 18,
-      "fileId": "file:lib_express_js",
-      "id": "symbol:d4499403_proto_variable_18",
-      "isExported": false,
-      "kind": "variable",
-      "metadata": {},
-      "modifiers": [],
-      "name": "proto",
-      "signature": "var proto = require('./application');",
-      "startCol": 0,
-      "startLine": 18,
-      "type": "symbol",
-    },
-    {
-      "endCol": 31,
-      "endLine": 20,
-      "fileId": "file:lib_express_js",
-      "id": "symbol:d4499403_req_variable_20",
-      "isExported": false,
-      "kind": "variable",
-      "metadata": {},
-      "modifiers": [],
-      "name": "req",
-      "signature": "var req = require('./request');",
-      "startCol": 0,
-      "startLine": 20,
-      "type": "symbol",
-    },
-    {
-      "endCol": 32,
-      "endLine": 21,
-      "fileId": "file:lib_express_js",
-      "id": "symbol:d4499403_res_variable_21",
-      "isExported": false,
-      "kind": "variable",
-      "metadata": {},
-      "modifiers": [],
-      "name": "res",
-      "signature": "var res = require('./response');",
-      "startCol": 0,
-      "startLine": 21,
+      "startLine": 3,
       "type": "symbol",
     },
   ],
@@ -223,18 +120,26 @@ exports[`MCP Enrichment Tests (Express.js Bench) > get_file_symbols for lib/expr
 
 exports[`MCP Enrichment Tests (Express.js Bench) > inspect_targets (file and symbol) 1`] = `
 {
-  "_token_count": 54,
+  "_token_count": 94,
   "_truncated": false,
   "results": [
     {
       "exports": [],
+      "id": "file:lib_express_js",
       "path": "lib/express.js",
       "type": "file",
     },
     {
       "definitions": [
         {
+          "docstring": "/**
+ * Create an express application.
+ *
+ * @return {Function}
+ * @api public
+ */",
           "filePath": "lib/express.js",
+          "id": "symbol:d4499403_createApplication_function_12",
           "kind": "function",
           "name": "createApplication",
           "signature": "function createApplication()",

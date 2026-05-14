@@ -2,11 +2,17 @@
 
 exports[`MCP Integration Tests (Express.js Bench) > fetch_symbol_metadata for known symbol 1`] = `
 {
-  "_token_count": 19,
+  "_token_count": 41,
   "_truncated": false,
   "count": 1,
   "symbols": [
     {
+      "docstring": "/**
+ * Create an express application.
+ *
+ * @return {Function}
+ * @api public
+ */",
       "kind": "function",
       "metadata": {},
       "name": "createApplication",
@@ -27,12 +33,260 @@ exports[`MCP Integration Tests (Express.js Bench) > find_references for "createA
 
 exports[`MCP Integration Tests (Express.js Bench) > get_code_overview (lib directory) 1`] = `
 {
+  "_cortex": {
+    "more_available": true,
+    "notes": [
+      "[IMPORTANT·architecture] Lib Module Rule: All files in lib must be exported via express.js",
+      "[IMPORTANT·architecture] Lib Module Rule: All files in lib must be exported via express.js",
+      "[IMPORTANT·architecture] Lib Module Rule: All files in lib must be exported via express.js",
+    ],
+  },
   "_token_count": 61,
   "_truncated": false,
   "structure": {
     "children": [
       {
         "name": "application.js",
+        "type": "file",
+      },
+      {
+        "name": "dummy_0.js",
+        "type": "file",
+      },
+      {
+        "name": "dummy_1.js",
+        "type": "file",
+      },
+      {
+        "name": "dummy_10.js",
+        "type": "file",
+      },
+      {
+        "name": "dummy_11.js",
+        "type": "file",
+      },
+      {
+        "name": "dummy_12.js",
+        "type": "file",
+      },
+      {
+        "name": "dummy_13.js",
+        "type": "file",
+      },
+      {
+        "name": "dummy_14.js",
+        "type": "file",
+      },
+      {
+        "name": "dummy_15.js",
+        "type": "file",
+      },
+      {
+        "name": "dummy_16.js",
+        "type": "file",
+      },
+      {
+        "name": "dummy_17.js",
+        "type": "file",
+      },
+      {
+        "name": "dummy_18.js",
+        "type": "file",
+      },
+      {
+        "name": "dummy_19.js",
+        "type": "file",
+      },
+      {
+        "name": "dummy_2.js",
+        "type": "file",
+      },
+      {
+        "name": "dummy_20.js",
+        "type": "file",
+      },
+      {
+        "name": "dummy_21.js",
+        "type": "file",
+      },
+      {
+        "name": "dummy_22.js",
+        "type": "file",
+      },
+      {
+        "name": "dummy_23.js",
+        "type": "file",
+      },
+      {
+        "name": "dummy_24.js",
+        "type": "file",
+      },
+      {
+        "name": "dummy_25.js",
+        "type": "file",
+      },
+      {
+        "name": "dummy_26.js",
+        "type": "file",
+      },
+      {
+        "name": "dummy_27.js",
+        "type": "file",
+      },
+      {
+        "name": "dummy_28.js",
+        "type": "file",
+      },
+      {
+        "name": "dummy_29.js",
+        "type": "file",
+      },
+      {
+        "name": "dummy_3.js",
+        "type": "file",
+      },
+      {
+        "name": "dummy_30.js",
+        "type": "file",
+      },
+      {
+        "name": "dummy_31.js",
+        "type": "file",
+      },
+      {
+        "name": "dummy_32.js",
+        "type": "file",
+      },
+      {
+        "name": "dummy_33.js",
+        "type": "file",
+      },
+      {
+        "name": "dummy_34.js",
+        "type": "file",
+      },
+      {
+        "name": "dummy_35.js",
+        "type": "file",
+      },
+      {
+        "name": "dummy_36.js",
+        "type": "file",
+      },
+      {
+        "name": "dummy_37.js",
+        "type": "file",
+      },
+      {
+        "name": "dummy_38.js",
+        "type": "file",
+      },
+      {
+        "name": "dummy_39.js",
+        "type": "file",
+      },
+      {
+        "name": "dummy_4.js",
+        "type": "file",
+      },
+      {
+        "name": "dummy_40.js",
+        "type": "file",
+      },
+      {
+        "name": "dummy_41.js",
+        "type": "file",
+      },
+      {
+        "name": "dummy_42.js",
+        "type": "file",
+      },
+      {
+        "name": "dummy_43.js",
+        "type": "file",
+      },
+      {
+        "name": "dummy_44.js",
+        "type": "file",
+      },
+      {
+        "name": "dummy_45.js",
+        "type": "file",
+      },
+      {
+        "name": "dummy_46.js",
+        "type": "file",
+      },
+      {
+        "name": "dummy_47.js",
+        "type": "file",
+      },
+      {
+        "name": "dummy_48.js",
+        "type": "file",
+      },
+      {
+        "name": "dummy_49.js",
+        "type": "file",
+      },
+      {
+        "name": "dummy_5.js",
+        "type": "file",
+      },
+      {
+        "name": "dummy_50.js",
+        "type": "file",
+      },
+      {
+        "name": "dummy_51.js",
+        "type": "file",
+      },
+      {
+        "name": "dummy_52.js",
+        "type": "file",
+      },
+      {
+        "name": "dummy_53.js",
+        "type": "file",
+      },
+      {
+        "name": "dummy_54.js",
+        "type": "file",
+      },
+      {
+        "name": "dummy_55.js",
+        "type": "file",
+      },
+      {
+        "name": "dummy_56.js",
+        "type": "file",
+      },
+      {
+        "name": "dummy_57.js",
+        "type": "file",
+      },
+      {
+        "name": "dummy_58.js",
+        "type": "file",
+      },
+      {
+        "name": "dummy_59.js",
+        "type": "file",
+      },
+      {
+        "name": "dummy_6.js",
+        "type": "file",
+      },
+      {
+        "name": "dummy_7.js",
+        "type": "file",
+      },
+      {
+        "name": "dummy_8.js",
+        "type": "file",
+      },
+      {
+        "name": "dummy_9.js",
         "type": "file",
       },
       {
@@ -45,6 +299,10 @@ exports[`MCP Integration Tests (Express.js Bench) > get_code_overview (lib direc
       },
       {
         "name": "response.js",
+        "type": "file",
+      },
+      {
+        "name": "router.js",
         "type": "file",
       },
       {
@@ -64,7 +322,7 @@ exports[`MCP Integration Tests (Express.js Bench) > get_code_overview (lib direc
 
 exports[`MCP Integration Tests (Express.js Bench) > get_dependencies for lib/express.js 1`] = `
 {
-  "_token_count": 363,
+  "_token_count": 362,
   "_truncated": false,
   "dependencies": [
     {
@@ -74,66 +332,16 @@ exports[`MCP Integration Tests (Express.js Bench) > get_dependencies for lib/exp
       "type": "module",
     },
     {
-      "content_hash": "505ba52497bd41ef401f04a2c0cb4d16fcfbd6d490bb0e0420a4637a79a794ab",
+      "content_hash": "e88317bab46e29c6c2f5b01d443577e6c95e67435d300032bf09a7b94fbf72b5",
       "ext": ".js",
-      "git_hash": "47be2a20c1af0c61f5ac207c077e78058f9ff34e",
-      "id": "file:lib_application_js",
+      "id": "file:lib_router_js",
       "language": "typescript",
-      "line_count": 632,
+      "line_count": 3,
       "module_id": "module:lib",
       "parse_status": "parsed",
-      "path": "lib/application.js",
-      "size_bytes": 13977,
+      "path": "lib/router.js",
+      "size_bytes": 73,
       "type": "file",
-    },
-    {
-      "content_hash": "d5645ebe62c8e914efd4343da17c8d6209bad7e354f003b1264d234f6aa7697d",
-      "ext": ".js",
-      "git_hash": "e7a451df6d9ed7798c4242b3bb1ede44719ee2cf",
-      "id": "file:lib_request_js",
-      "language": "typescript",
-      "line_count": 528,
-      "module_id": "module:lib",
-      "parse_status": "parsed",
-      "path": "lib/request.js",
-      "size_bytes": 12254,
-      "type": "file",
-    },
-    {
-      "content_hash": "5fe7b091799a1b914c43d92a80bcd679bfb4af832f21a07fac8e60fc8982a0da",
-      "ext": ".js",
-      "git_hash": "f965e539dd260cc88b7745e9db9154d721751308",
-      "id": "file:lib_response_js",
-      "language": "typescript",
-      "line_count": 1048,
-      "module_id": "module:lib",
-      "parse_status": "parsed",
-      "path": "lib/response.js",
-      "size_bytes": 24844,
-      "type": "file",
-    },
-    {
-      "id": "module:merge_descriptors",
-      "is_root": false,
-      "name": "merge-descriptors",
-      "type": "module",
-    },
-    {
-      "id": "module:node_events",
-      "is_root": false,
-      "name": "node:events",
-      "type": "module",
-    },
-    {
-      "id": "module:router",
-      "name": "router",
-      "type": "module",
-    },
-    {
-      "id": "module:serve_static",
-      "is_root": false,
-      "name": "serve-static",
-      "type": "module",
     },
   ],
   "file": "lib/express.js",
@@ -142,379 +350,19 @@ exports[`MCP Integration Tests (Express.js Bench) > get_dependencies for lib/exp
 
 exports[`MCP Integration Tests (Express.js Bench) > get_file_tree (root) 1`] = `
 {
-  "_token_count": 712,
+  "_token_count": 35,
   "_truncated": false,
   "structure": {
     "children": [
       {
         "children": [
           {
-            "name": "index.js",
-            "type": "file",
-          },
-        ],
-        "name": "auth",
-        "type": "package",
-      },
-      {
-        "children": [
-          {
-            "name": "db.js",
-            "type": "file",
-          },
-          {
-            "name": "index.js",
-            "type": "file",
-          },
-          {
-            "name": "users.js",
-            "type": "file",
-          },
-        ],
-        "name": "content-negotiation",
-        "type": "package",
-      },
-      {
-        "children": [
-          {
-            "name": "index.js",
-            "type": "file",
-          },
-        ],
-        "name": "cookie-sessions",
-        "type": "package",
-      },
-      {
-        "children": [
-          {
-            "name": "index.js",
-            "type": "file",
-          },
-        ],
-        "name": "cookies",
-        "type": "package",
-      },
-      {
-        "children": [
-          {
-            "name": "index.js",
-            "type": "file",
-          },
-        ],
-        "name": "downloads",
-        "type": "package",
-      },
-      {
-        "children": [
-          {
-            "name": "index.js",
-            "type": "file",
-          },
-        ],
-        "name": "ejs",
-        "type": "package",
-      },
-      {
-        "children": [
-          {
-            "name": "index.js",
-            "type": "file",
-          },
-        ],
-        "name": "error",
-        "type": "package",
-      },
-      {
-        "children": [
-          {
-            "name": "index.js",
-            "type": "file",
-          },
-        ],
-        "name": "error-pages",
-        "type": "package",
-      },
-      {
-        "children": [
-          {
-            "name": "index.js",
-            "type": "file",
-          },
-        ],
-        "name": "hello-world",
-        "type": "package",
-      },
-      {
-        "children": [
-          {
-            "name": "application.js",
-            "type": "file",
-          },
-          {
-            "name": "express.js",
-            "type": "file",
-          },
-          {
-            "name": "request.js",
-            "type": "file",
-          },
-          {
-            "name": "response.js",
-            "type": "file",
-          },
-          {
-            "name": "utils.js",
-            "type": "file",
-          },
-          {
-            "name": "view.js",
-            "type": "file",
+            "name": "... (+67 more files)",
+            "type": "summary",
           },
         ],
         "name": "lib",
         "type": "module",
-      },
-      {
-        "children": [
-          {
-            "name": "index.js",
-            "type": "file",
-          },
-        ],
-        "name": "markdown",
-        "type": "package",
-      },
-      {
-        "children": [
-          {
-            "name": "controllers",
-            "type": "module",
-          },
-          {
-            "name": "index.js",
-            "type": "file",
-          },
-        ],
-        "name": "multi-router",
-        "type": "package",
-      },
-      {
-        "children": [
-          {
-            "name": "lib",
-            "type": "module",
-          },
-          {
-            "name": "main",
-            "type": "package",
-          },
-          {
-            "name": "pet",
-            "type": "package",
-          },
-          {
-            "name": "user",
-            "type": "package",
-          },
-          {
-            "name": "user-pet",
-            "type": "package",
-          },
-          {
-            "name": "db.js",
-            "type": "file",
-          },
-          {
-            "name": "index.js",
-            "type": "file",
-          },
-        ],
-        "name": "mvc",
-        "type": "package",
-      },
-      {
-        "children": [
-          {
-            "name": "index.js",
-            "type": "file",
-          },
-        ],
-        "name": "online",
-        "type": "package",
-      },
-      {
-        "children": [
-          {
-            "name": "index.js",
-            "type": "file",
-          },
-        ],
-        "name": "params",
-        "type": "package",
-      },
-      {
-        "children": [
-          {
-            "name": "index.js",
-            "type": "file",
-          },
-        ],
-        "name": "resource",
-        "type": "package",
-      },
-      {
-        "children": [
-          {
-            "name": "index.js",
-            "type": "file",
-          },
-        ],
-        "name": "route-map",
-        "type": "package",
-      },
-      {
-        "children": [
-          {
-            "name": "index.js",
-            "type": "file",
-          },
-        ],
-        "name": "route-middleware",
-        "type": "package",
-      },
-      {
-        "children": [
-          {
-            "name": "index.js",
-            "type": "file",
-          },
-          {
-            "name": "post.js",
-            "type": "file",
-          },
-          {
-            "name": "site.js",
-            "type": "file",
-          },
-          {
-            "name": "user.js",
-            "type": "file",
-          },
-        ],
-        "name": "route-separation",
-        "type": "package",
-      },
-      {
-        "children": [
-          {
-            "name": "public",
-            "type": "module",
-          },
-          {
-            "name": "index.js",
-            "type": "file",
-          },
-        ],
-        "name": "search",
-        "type": "package",
-      },
-      {
-        "children": [
-          {
-            "name": "index.js",
-            "type": "file",
-          },
-          {
-            "name": "redis.js",
-            "type": "file",
-          },
-        ],
-        "name": "session",
-        "type": "package",
-      },
-      {
-        "children": [
-          {
-            "name": "js",
-            "type": "module",
-          },
-          {
-            "name": "index.js",
-            "type": "file",
-          },
-        ],
-        "name": "static-files",
-        "type": "package",
-      },
-      {
-        "children": [
-          {
-            "name": "acceptance",
-            "type": "module",
-          },
-          {
-            "name": "support",
-            "type": "module",
-          },
-          {
-            "name": "... (+70 more files)",
-            "type": "summary",
-          },
-        ],
-        "name": "test",
-        "type": "module",
-      },
-      {
-        "children": [
-          {
-            "name": "index.js",
-            "type": "file",
-          },
-        ],
-        "name": "vhost",
-        "type": "package",
-      },
-      {
-        "children": [
-          {
-            "name": "github-view.js",
-            "type": "file",
-          },
-          {
-            "name": "index.js",
-            "type": "file",
-          },
-        ],
-        "name": "view-constructor",
-        "type": "package",
-      },
-      {
-        "children": [
-          {
-            "name": "index.js",
-            "type": "file",
-          },
-          {
-            "name": "user.js",
-            "type": "file",
-          },
-        ],
-        "name": "view-locals",
-        "type": "package",
-      },
-      {
-        "children": [
-          {
-            "name": "index.js",
-            "type": "file",
-          },
-        ],
-        "name": "web-service",
-        "type": "package",
-      },
-      {
-        "name": "index.js",
-        "type": "file",
       },
     ],
     "name": "express",
@@ -525,15 +373,21 @@ exports[`MCP Integration Tests (Express.js Bench) > get_file_tree (root) 1`] = `
 
 exports[`MCP Integration Tests (Express.js Bench) > query_symbol "createApplication" 1`] = `
 {
-  "_token_count": 73,
+  "_token_count": 96,
   "_truncated": false,
   "symbols": [
     {
+      "docstring": "/**
+ * Create an express application.
+ *
+ * @return {Function}
+ * @api public
+ */",
       "endCol": 1,
-      "endLine": 56,
+      "endLine": 17,
       "fileId": "file:lib_express_js",
       "filePath": "lib/express.js",
-      "id": "symbol:d4499403_createApplication_function_36",
+      "id": "symbol:d4499403_createApplication_function_12",
       "isExported": false,
       "kind": "function",
       "metadata": {},
@@ -541,7 +395,7 @@ exports[`MCP Integration Tests (Express.js Bench) > query_symbol "createApplicat
       "name": "createApplication",
       "signature": "function createApplication()",
       "startCol": 0,
-      "startLine": 36,
+      "startLine": 12,
       "type": "symbol",
     },
   ],
@@ -556,7 +410,7 @@ exports[`MCP Integration Tests (Express.js Bench) > search_codebase for "createA
   "matches": [
     {
       "filePath": "lib/express.js",
-      "id": "symbol:d4499403_createApplication_function_36",
+      "id": "symbol:d4499403_createApplication_function_12",
       "kind": "function",
       "language": "typescript",
       "name": "createApplication",
@@ -568,31 +422,19 @@ exports[`MCP Integration Tests (Express.js Bench) > search_codebase for "createA
 
 exports[`MCP Integration Tests (Express.js Bench) > smart_file_read (skeleton) lib/express.js 1`] = `
 {
+  "_cortex": {
+    "more_available": true,
+    "notes": [
+      "[IMPORTANT·architecture] Lib Module Rule: All files in lib must be exported via express.js",
+      "[IMPORTANT·architecture] Lib Module Rule: All files in lib must be exported via express.js",
+      "[IMPORTANT·architecture] Test Architecture Note: This is a test note for lib/express.js",
+    ],
+  },
   "_token_count": 244,
   "_truncated": false,
-  "content": "/*!
-    /* [body] */
- */
-
-'use strict';
-
-/**
- * Module dependencies.
- */
-
-var bodyParser = require('body-parser')
-var EventEmitter = require('node:events').EventEmitter;
-var mixin = require('merge-descriptors');
-var proto = require('./application');
-var Router = require('router');
-var req = require('./request');
-var res = require('./response');
-
-/**
- * Expose \`createApplication()\`.
- */
-
-exports = module.exports = createApplication;
+  "content": "
+var bodyParser = require('body-parser');
+var router = require('./router');
 
 /**
     /* [body] */
@@ -605,33 +447,10 @@ function createApplication() {
     /* [body] */
 }
 
-/**
- * Expose the prototypes.
- */
-
-exports.application = proto;
-exports.request = req;
-exports.response = res;
-
-/**
- * Expose constructors.
- */
-
-exports.Route = Router.Route;
-exports.Router = Router;
-
-/**
- * Expose middleware
- */
-
-exports.json = bodyParser.json
-exports.raw = bodyParser.raw
-exports.static = require('serve-static');
-exports.text = bodyParser.text
-exports.urlencoded = bodyParser.urlencoded
+exports = module.exports = createApplication;
 ",
   "mode_used": "skeleton",
-  "symbol_count": 9,
+  "symbol_count": 4,
   "warnings": [],
 }
 `;

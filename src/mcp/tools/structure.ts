@@ -163,7 +163,7 @@ async function executeStructureQuery(store: IStore, budget: TokenBudgetManager, 
   if (focusPath === '.' || focusPath === './') focusPath = undefined; // Use root
   const showSymbols = args.showSymbols !== false;
 
-  const repos = await store.query<any>(`SELECT id, name, type, path FROM repository LIMIT 1`);
+  const repos = await store.query<any>(`SELECT id, name, type, path FROM repository LIMIT 1`) || [];
   if (repos.length === 0) {
     throw new Error('Repository not initialized. Run `tokenzip init` and `tokenzip parse` first.');
   }
@@ -171,7 +171,7 @@ async function executeStructureQuery(store: IStore, budget: TokenBudgetManager, 
   const rootId = repos[0].id.toString();
   
   // Fetch stats to determine threshold
-  const statsRes = await store.query<any>('SELECT count() as count FROM file GROUP ALL');
+  const statsRes = await store.query<any>('SELECT count() as count FROM file GROUP ALL') || [];
   const totalFiles = statsRes[0]?.count || 0;
   const foldThreshold = totalFiles > 1000 ? 50 : 8;
 
@@ -511,7 +511,7 @@ export function createStructureTools(store: IStore, repoPath: string, budget: To
       handler: async (args: any) => {
         try {
           // Find file node first to get its ID
-          const fileRes = await store.query<any>('SELECT id FROM file WHERE path = $path LIMIT 1', { path: args.file_path });
+          const fileRes = await store.query<any>('SELECT id FROM file WHERE path = $path LIMIT 1', { path: args.file_path }) || [];
           if (fileRes.length === 0) {
             return {
               content: [{ type: 'text', text: `File not found: ${args.file_path}` }],
@@ -520,7 +520,7 @@ export function createStructureTools(store: IStore, repoPath: string, budget: To
           }
           
           const fileId = fileRes[0].id;
-          const symbols = await store.query('SELECT * FROM symbol WHERE fileId = $fileId', { fileId });
+          const symbols = await store.query('SELECT * FROM symbol WHERE fileId = $fileId', { fileId }) || [];
           
           const response = budget.truncate({ file: args.file_path, symbols });
           return {
@@ -559,9 +559,9 @@ export function createStructureTools(store: IStore, repoPath: string, budget: To
 
           for (const target of targets) {
             // Check if it's a file
-            const fileRes = await store.query<any[]>('SELECT id, path, language FROM file WHERE path = $path LIMIT 1', { path: target });
+            const fileRes = await store.query<any[]>('SELECT id, path, language FROM file WHERE path = $path LIMIT 1', { path: target }) || [];
             if (fileRes.length > 0) {
-              const symbols = await store.query('SELECT id, name, kind, signature, docstring, isExported FROM symbol WHERE fileId = $fileId AND isExported = true', { fileId: fileRes[0].id });
+              const symbols = await store.query('SELECT id, name, kind, signature, docstring, isExported FROM symbol WHERE fileId = $fileId AND isExported = true', { fileId: fileRes[0].id }) || [];
               results.push({
                 type: 'file',
                 id: fileRes[0].id,
@@ -572,7 +572,7 @@ export function createStructureTools(store: IStore, repoPath: string, budget: To
             }
 
             // Check if it's a module
-            const modRes = await store.query<any[]>('SELECT id, path FROM module WHERE path = $path LIMIT 1', { path: target });
+            const modRes = await store.query<any[]>('SELECT id, path FROM module WHERE path = $path LIMIT 1', { path: target }) || [];
             if (modRes.length > 0) {
               results.push({
                 type: 'module',
@@ -587,7 +587,7 @@ export function createStructureTools(store: IStore, repoPath: string, budget: To
               SELECT id, name, kind, signature, docstring, 
                      (SELECT path FROM file WHERE id = $parent.fileId)[0].path as filePath 
               FROM symbol WHERE name = $name
-            `, { name: target });
+            `, { name: target }) || [];
             
             if (symbolRes.length > 0) {
               results.push({

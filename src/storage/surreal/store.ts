@@ -26,11 +26,11 @@ export class SurrealStore implements IStore {
     this.forcedPort = forcedPort;
   }
 
-  async initialize(): Promise<void> {
+  async initialize(): Promise<boolean> {
     if (this.dbPath.startsWith('mem:')) {
       await this.db.connect(this.dbPath);
       await this.db.use({ namespace: 'tokenzip', database: 'graph' });
-      return;
+      return true;
     }
 
     const parent = path.dirname(this.dbPath);
@@ -48,7 +48,7 @@ export class SurrealStore implements IStore {
         await this.db.connect(`http://127.0.0.1:${port}`);
         await this.db.signin({ username: 'root', password: 'root' });
         await this.db.use({ namespace: 'tokenzip', database: 'graph' });
-        return; // Connected to existing
+        return false; // Connected to existing server, not the owner
       } catch (err) {
         console.log('Existing server not responding, cleaning up stale port...');
         try { fs.unlinkSync(portPath); } catch {}
@@ -91,7 +91,7 @@ export class SurrealStore implements IStore {
       process.on('SIGINT', () => { this.cleanup(); process.exit(); });
       process.on('SIGTERM', () => { this.cleanup(); process.exit(); });
 
-      return; // We are the owner
+      return true; // We are the owner
     } catch (err) {
       console.error('Failed to connect to newly started server:', err);
       this.cleanup();
@@ -160,8 +160,9 @@ export class SurrealStore implements IStore {
     try {
       process.kill(pid, 0);
       return true;
-    } catch (e) {
-      return false;
+    } catch (e: any) {
+      // EPERM means the process is running but we don't have permission to signal it
+      return e.code === 'EPERM';
     }
   }
 

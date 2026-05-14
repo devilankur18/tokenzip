@@ -18,7 +18,7 @@ export function createSymbolTools(store: IStore, repoPath: string, budget: Token
       },
       handler: async (args: any) => {
         try {
-          const symbols = await store.query<any>('SELECT *, (SELECT path FROM file WHERE id = $parent.fileId)[0].path as filePath FROM symbol WHERE name = $name', { name: args.symbol_name });
+          const symbols = await store.query<any>('SELECT *, (SELECT path FROM file WHERE id = $parent.fileId)[0].path as filePath FROM symbol WHERE name = $name', { name: args.symbol_name }) || [];
           
           if (symbols.length > 1) {
             const candidates = symbols.map(s => ({
@@ -63,14 +63,14 @@ export function createSymbolTools(store: IStore, repoPath: string, budget: Token
         try {
           const { normalizePath } = await import('../../utils/path-utils.js');
           const normalizedPath = normalizePath(args.file_path);
-          const fileRes = await store.query<any>('SELECT id FROM file WHERE path = $path LIMIT 1', { path: normalizedPath });
+          const fileRes = await store.query<any>('SELECT id FROM file WHERE path = $path LIMIT 1', { path: normalizedPath }) || [];
           if (fileRes.length === 0) {
             return { content: [{ type: 'text', text: `File not found: ${args.file_path}` }], isError: true };
           }
           
           const fileId = fileRes[0].id;
           // Find all modules/files imported by this file
-          const imports = await store.query('SELECT out as target FROM imports WHERE in = $fileId FETCH target', { fileId });
+          const imports = await store.query('SELECT out as target FROM imports WHERE in = $fileId FETCH target', { fileId }) || [];
           const dependencies = imports.map((i: any) => i.target).sort((a: any, b: any) => (a.path || a.name || '').localeCompare(b.path || b.name || ''));
           
           const response = budget.truncate({ file: normalizedPath, dependencies });
@@ -95,7 +95,7 @@ export function createSymbolTools(store: IStore, repoPath: string, budget: Token
       handler: async (args: any) => {
         try {
           // Find the target symbols first
-          const targets = await store.query<any>('SELECT id FROM symbol WHERE name = $name', { name: args.symbol_name });
+          const targets = await store.query<any>('SELECT id FROM symbol WHERE name = $name', { name: args.symbol_name }) || [];
           if (targets.length === 0) {
             return { content: [{ type: 'text', text: `Symbol not found: ${args.symbol_name}` }], isError: true };
           }
@@ -104,10 +104,10 @@ export function createSymbolTools(store: IStore, repoPath: string, budget: Token
           
           // Find symbols that have ANY of these relations to our targets
           const [r1, r2, r3, r4] = await Promise.all([
-            store.query<any[]>('SELECT VALUE in FROM calls WHERE out IN $targets', { targets: targetIds }),
-            store.query<any[]>('SELECT VALUE in FROM inherits WHERE out IN $targets', { targets: targetIds }),
-            store.query<any[]>('SELECT VALUE in FROM implements WHERE out IN $targets', { targets: targetIds }),
-            store.query<any[]>('SELECT VALUE in FROM references WHERE out IN $targets', { targets: targetIds })
+            store.query<any[]>('SELECT VALUE in FROM calls WHERE out IN $targets', { targets: targetIds }).then(r => r || []),
+            store.query<any[]>('SELECT VALUE in FROM inherits WHERE out IN $targets', { targets: targetIds }).then(r => r || []),
+            store.query<any[]>('SELECT VALUE in FROM implements WHERE out IN $targets', { targets: targetIds }).then(r => r || []),
+            store.query<any[]>('SELECT VALUE in FROM references WHERE out IN $targets', { targets: targetIds }).then(r => r || [])
           ]);
           
           const allIds = Array.from(new Set([...r1, ...r2, ...r3, ...r4]));
@@ -116,7 +116,7 @@ export function createSymbolTools(store: IStore, repoPath: string, budget: Token
             SELECT *, (SELECT path FROM file WHERE id = $parent.fileId)[0].path as filePath
             FROM symbol
             WHERE id IN $ids
-          `, { ids: allIds });
+          `, { ids: allIds }) || [];
           
           callers.sort((a: any, b: any) => (a.filePath || '').localeCompare(b.filePath || '') || a.startLine - b.startLine);
           
@@ -159,7 +159,7 @@ export function createSymbolTools(store: IStore, repoPath: string, budget: Token
             q += ' AND id = $id';
           }
           
-          const results = await store.query<any>(q, { name: args.symbol_name, id: args.symbol_id });
+          const results = await store.query<any>(q, { name: args.symbol_name, id: args.symbol_id }) || [];
 
           if (results.length === 0) {
             return { content: [{ type: 'text', text: `Symbol not found: ${args.symbol_name}` }], isError: true };

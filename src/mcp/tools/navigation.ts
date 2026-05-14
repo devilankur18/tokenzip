@@ -18,7 +18,7 @@ export function createNavigationTools(store: IStore, repoPath: string, budget: T
         try {
           const { symbol_name } = args;
           
-          const targets = await store.query<any>('SELECT id FROM symbol WHERE name = $name', { name: symbol_name });
+          const targets = await store.query<any>('SELECT id FROM symbol WHERE name = $name', { name: symbol_name }) || [];
           if (targets.length === 0) {
             return { content: [{ type: 'text', text: `Symbol not found: ${symbol_name}` }], isError: true };
           }
@@ -29,7 +29,7 @@ export function createNavigationTools(store: IStore, repoPath: string, budget: T
             SELECT *, fileId.path as filePath
             FROM symbol 
             WHERE id IN (SELECT VALUE in FROM implements, inherits WHERE out IN $targets)
-          `, { targets: targetIds });
+          `, { targets: targetIds }) || [];
 
           const response = budget.truncate({ 
             symbol: symbol_name,
@@ -60,7 +60,9 @@ export function createNavigationTools(store: IStore, repoPath: string, budget: T
         try {
           const { symbol_name, symbol_id } = args;
           
-          let targetId = targets[0].id;
+          let targetId;
+          let actualName = symbol_name;
+
           if (symbol_id) {
             if (typeof symbol_id === 'string' && symbol_id.includes(':')) {
               const [table, ...rest] = symbol_id.split(':');
@@ -68,21 +70,28 @@ export function createNavigationTools(store: IStore, repoPath: string, budget: T
             } else {
               targetId = symbol_id;
             }
+          } else {
+            const symbols = await store.query<any>('SELECT id, name FROM symbol WHERE name = $name LIMIT 1', { name: symbol_name }) || [];
+            if (symbols.length === 0) {
+              return { content: [{ type: 'text', text: `Symbol not found: ${symbol_name}` }], isError: true };
+            }
+            targetId = symbols[0].id;
+            actualName = symbols[0].name;
           }
 
           const [incoming, outgoing] = await Promise.all([
             store.query(`
               SELECT in.name as name, in.kind as kind, in.fileId.path as filePath, in.id as id
               FROM calls WHERE out = $id
-            `, { id: targetId }),
+            `, { id: targetId }).then(r => r || []),
             store.query(`
               SELECT out.name as name, out.kind as kind, out.fileId.path as filePath, out.id as id
               FROM calls WHERE in = $id
-            `, { id: targetId })
+            `, { id: targetId }).then(r => r || [])
           ]);
 
           const response = budget.truncate({ 
-            symbol: targets[0].name,
+            symbol: actualName,
             incoming,
             outgoing 
           });

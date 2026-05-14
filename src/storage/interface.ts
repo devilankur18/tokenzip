@@ -2,7 +2,7 @@ import { GraphNode, GraphEdge, GraphResult, StoreStats } from '../types/graph.js
 
 export interface IStore {
   // Lifecycle
-  initialize(): Promise<void>;
+  initialize(): Promise<boolean>;
   close(): Promise<void>;
   migrate(): Promise<void>;
   clear(): Promise<void>;
