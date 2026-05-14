@@ -23,13 +23,20 @@ export function createContextTools(store: IStore, repoPath: string, budget: Toke
           let q = `
             SELECT 
               *, 
-              (SELECT path FROM file WHERE id = $parent.fileId)[0].path as filePath 
+              fileId.path as filePath 
             FROM symbol 
             WHERE name = $name
           `;
           if (symbol_id) q += ' AND id = $id';
           
-          const results = await store.query<any>(q, { name: symbol_name, id: symbol_id });
+          let targetId = symbol_id;
+          if (typeof symbol_id === 'string' && symbol_id.includes(':')) {
+            const { RecordId } = await import('surrealdb');
+            const [table, ...rest] = symbol_id.split(':');
+            targetId = new RecordId(table, rest.join(':'));
+          }
+
+          const results = await store.query<any>(q, { name: symbol_name, id: targetId });
           if (results.length === 0) {
             return { content: [{ type: 'text', text: `Symbol not found: ${symbol_name}` }], isError: true };
           }
@@ -44,7 +51,7 @@ export function createContextTools(store: IStore, repoPath: string, budget: Toke
           const callees = await store.query<any>(`
             SELECT 
               out.name as name, out.signature as signature, out.kind as kind, 
-              (SELECT path FROM file WHERE id = out.fileId)[0].path as filePath
+              out.fileId.path as filePath
             FROM calls WHERE in = $id
           `, { id: sym.id });
 
