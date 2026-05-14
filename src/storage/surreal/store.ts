@@ -26,11 +26,11 @@ export class SurrealStore implements IStore {
     this.forcedPort = forcedPort;
   }
 
-  async initialize(): Promise<boolean> {
+  async initialize(): Promise<void> {
     if (this.dbPath.startsWith('mem:')) {
       await this.db.connect(this.dbPath);
       await this.db.use({ namespace: 'tokenzip', database: 'graph' });
-      return true;
+      return;
     }
 
     const parent = path.dirname(this.dbPath);
@@ -48,7 +48,7 @@ export class SurrealStore implements IStore {
         await this.db.connect(`http://127.0.0.1:${port}`);
         await this.db.signin({ username: 'root', password: 'root' });
         await this.db.use({ namespace: 'tokenzip', database: 'graph' });
-        return false; // Not the owner
+        return; // Connected to existing
       } catch (err) {
         console.log('Existing server not responding, cleaning up stale port...');
         try { fs.unlinkSync(portPath); } catch {}
@@ -91,7 +91,7 @@ export class SurrealStore implements IStore {
       process.on('SIGINT', () => { this.cleanup(); process.exit(); });
       process.on('SIGTERM', () => { this.cleanup(); process.exit(); });
 
-      return true; // We are the owner
+      return; // We are the owner
     } catch (err) {
       console.error('Failed to connect to newly started server:', err);
       this.cleanup();
@@ -212,7 +212,16 @@ export class SurrealStore implements IStore {
 
   async migrate(): Promise<void> {
     await this.db.query('DEFINE NAMESPACE IF NOT EXISTS tokenzip; DEFINE DATABASE IF NOT EXISTS graph;');
-    await this.db.query(SCHEMA_DEFINITION);
+    const results = await this.db.query(SCHEMA_DEFINITION);
+    
+    if (Array.isArray(results)) {
+      const errors = (results as any[]).filter(r => r && typeof r === 'object' && r.status === 'ERR');
+      if (errors.length > 0) {
+        console.error(`❌ Migration failed with ${errors.length} errors:`);
+        errors.forEach((e: any, i: number) => console.error(`  [${i}] ${e.result}`));
+        throw new Error(`Schema migration failed: ${errors[0].result}`);
+      }
+    }
   }
 
   async clear(): Promise<void> {

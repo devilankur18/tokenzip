@@ -19,13 +19,11 @@ export async function injectCortex(filePath: string, store: IStore, budget: Toke
     // Only high confidence/critical notes for auto-recall
     const query = `
       SELECT 
-        category, title, summary, priority, confidence
+        category, title, summary, priority, confidence, target_hash
       FROM annotation 
       WHERE is_active = true 
         AND confidence >= 0.8
-        AND (
-          ->scoped_to->(file, module, repository) WHERE path IN $paths OR type = 'repository'
-        )
+        AND count(->scoped_to->(file, module, repository)[WHERE path IN $paths OR type = 'repository']) > 0
       ORDER BY priority DESC, confidence DESC
       LIMIT 5
     `;
@@ -108,7 +106,7 @@ export function createCortexTools(store: IStore, repoPath: string, budget: Token
           }
 
           // 2. Create the annotation node
-          const annotationData = {
+          const annotationData: any = {
             category: args.category,
             title: args.title,
             summary: args.summary,
@@ -123,6 +121,13 @@ export function createCortexTools(store: IStore, repoPath: string, budget: Token
             supersedes: args.supersedes ? new RecordId('annotation', args.supersedes) : undefined,
             is_active: true
           };
+
+          // Clean up undefined/nulls to let SurrealDB defaults kick in
+          for (const key of Object.keys(annotationData)) {
+            if (annotationData[key] === undefined || annotationData[key] === null) {
+              delete annotationData[key];
+            }
+          }
 
           const [annotation] = await store.query<any>('CREATE annotation CONTENT $data', { data: annotationData });
 
@@ -323,21 +328,29 @@ export function createCortexTools(store: IStore, repoPath: string, budget: Token
       },
       handler: async (args: any) => {
         try {
-          const [suggestion] = await store.query<any>('CREATE suggestion CONTENT $data', {
-            data: {
-              problem: args.problem,
-              proposed: args.proposed_solution,
-              severity: args.severity,
-              related_targets: args.related_targets || [],
-              status: 'new'
+          const suggestionData: any = {
+            problem: args.problem,
+            proposed: args.proposed_solution,
+            severity: args.severity,
+            related_targets: args.related_targets || [],
+            status: 'new'
+          };
+
+          for (const key of Object.keys(suggestionData)) {
+            if (suggestionData[key] === undefined || suggestionData[key] === null) {
+              delete suggestionData[key];
             }
+          }
+
+          const [suggestion] = await store.query<any>('CREATE suggestion CONTENT $data', {
+            data: suggestionData
           });
 
           // Link to related targets if possible
           if (args.related_targets) {
             for (const target of args.related_targets) {
               // Try to find target ID
-              const res = await store.query<any>('SELECT id FROM (file, module, symbol, repository) WHERE path = $target OR name = $target LIMIT 1', { target });
+              const res = await store.query<any>('SELECT id FROM file, module, symbol, repository WHERE path = $target OR name = $target LIMIT 1', { target });
               if (res.length > 0) {
                 await store.query('RELATE $sug->relates_to->$target', { sug: suggestion.id, target: res[0].id });
               }
@@ -371,11 +384,11 @@ export function createCortexTools(store: IStore, repoPath: string, budget: Token
 
           // 1. Check for stored traversal hints
           const hintQuery = `
-            SELECT id, title, summary, read_order, skip_paths
+            SELECT id, title, summary, read_order, skip_paths, access_count
             FROM annotation
             WHERE is_active = true 
               AND category = 'traversal_hint'
-              AND ->scoped_to->(module, repository) WHERE path = $target OR type = 'repository'
+              AND count(->scoped_to->(module, repository)[WHERE path = $target OR type = 'repository']) > 0
             ORDER BY access_count DESC
             LIMIT 1
           `;
@@ -407,9 +420,9 @@ export function createCortexTools(store: IStore, repoPath: string, budget: Token
           const moduleId = modRes[0].id;
 
           const filesQuery = `
-            SELECT path, (SELECT count() FROM <-imports WHERE out.type = 'file' AND in.id = $this.id) as incoming_deps
+            SELECT path, (SELECT count() FROM <-imports WHERE out.type = 'file' AND in.id = $parent.id) as incoming_deps
             FROM file
-            WHERE ->contains<-module WHERE id = $moduleId
+            WHERE module_id = $moduleId
             ORDER BY incoming_deps ASC
             LIMIT 10
           `;

@@ -183,6 +183,7 @@ DEFINE FIELD OVERWRITE priority ON annotation TYPE string DEFAULT 'normal'
   ASSERT $value IN ['critical', 'important', 'normal', 'low'];
 DEFINE FIELD OVERWRITE supersedes ON annotation TYPE option<record<annotation>>;
 DEFINE FIELD OVERWRITE is_active ON annotation TYPE bool DEFAULT true;
+DEFINE FIELD OVERWRITE removal_reason ON annotation TYPE option<string>;
 
 // Staleness Detection — snapshot of target file's content_hash at write time
 DEFINE FIELD OVERWRITE target_hash ON annotation TYPE option<string>;

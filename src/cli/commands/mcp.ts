@@ -43,29 +43,37 @@ Examples:
         process.exit(1);
       }
 
-      // Parse arguments: handle both key=value and --key=value
+      // Parse arguments: handle JSON string OR key=value/--key=value
       const args: any = {};
       
-      // Get all raw arguments from process.argv after the tool name
       const rawArgs = process.argv.slice(process.argv.indexOf(toolName) + 1);
       
-      for (let i = 0; i < rawArgs.length; i++) {
-        const arg = rawArgs[i];
-        
-        if (arg.includes('=')) {
-          // Handles key=value and --key=value
-          const cleanArg = arg.startsWith('--') ? arg.slice(2) : arg;
-          const [key, ...rest] = cleanArg.split('=');
-          args[key] = rest.join('=');
-        } else if (arg.startsWith('--')) {
-          // Handles --key value
-          const key = arg.slice(2);
-          const nextArg = rawArgs[i + 1];
-          if (nextArg && !nextArg.startsWith('--')) {
-            args[key] = nextArg;
-            i++; // skip next
-          } else {
-            args[key] = "true"; // boolean flag
+      // Try parsing as single JSON object first
+      if (rawArgs.length === 1 && rawArgs[0].startsWith('{')) {
+        try {
+          Object.assign(args, JSON.parse(rawArgs[0]));
+        } catch (err) {
+          console.error('Warning: Failed to parse argument as JSON, falling back to key=value parsing.');
+        }
+      }
+
+      if (Object.keys(args).length === 0) {
+        for (let i = 0; i < rawArgs.length; i++) {
+          const arg = rawArgs[i];
+          
+          if (arg.includes('=')) {
+            const cleanArg = arg.startsWith('--') ? arg.slice(2) : arg;
+            const [key, ...rest] = cleanArg.split('=');
+            args[key] = rest.join('=');
+          } else if (arg.startsWith('--')) {
+            const key = arg.slice(2);
+            const nextArg = rawArgs[i + 1];
+            if (nextArg && !nextArg.startsWith('--')) {
+              args[key] = nextArg;
+              i++;
+            } else {
+              args[key] = "true";
+            }
           }
         }
       }
