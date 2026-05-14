@@ -5,7 +5,7 @@
 **The Semantic Compression Layer for AI Agents.**  
 Transform any codebase into a queryable knowledge graph and stop wasting tokens on implementation details.
 
-![TokenZip Hero Comparison](https://raw.githubusercontent.com/devilankur18/tokenzip/main/assets/hero_comparison.png)
+![TokenZip Hero Comparison](assets/hero_comparison.png)
 
 [![npm version](https://img.shields.io/npm/v/tokenzip.svg)](https://www.npmjs.com/package/tokenzip)
 [![Node.js >= 18](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg)](https://nodejs.org)
@@ -58,6 +58,8 @@ Standard agents send the *entire* content of every file they read in every turn.
 **The TokenZip Edge**: 
 By reading **Skeletons** during navigation and only fetching full implementations when absolutely necessary, TokenZip reduces the "cumulative tax" by **~85%**. This allows you to perform deep, multi-file refactors for the price of a single standard chat.
 
+![Token Economics](assets/cost_savings_card.png)
+
 ---
 
 ## 📊 Case Study: OpenClaw (14K+ Files)
@@ -71,6 +73,8 @@ By reading **Skeletons** during navigation and only fetching full implementation
 | **Input Cost (Per Turn)** | 🔴 11.3M Tokens | 🟢 2.9M Tokens |
 | **5-Turn Cumulative** | 🔴 56.5M Tokens | 🟢 14.5M Tokens |
 | **Direct Savings (5 Turns)** | **--** | **42M Tokens (~$210+ for claude opus Saved)** |
+
+![OpenClaw Benchmark](assets/benchmark_chart.png)
 
 *By reducing the "per-file" token tax, TokenZip allows your AI agents to maintain massive repositories in their active memory without hitting token limits or burning through API budgets.*
 
