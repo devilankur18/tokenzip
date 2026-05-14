@@ -3,14 +3,12 @@ import ForceGraph2D from 'react-force-graph-2d';
 import { Surreal } from 'surrealdb';
 import { 
   Search, 
-  Settings, 
   Maximize2, 
   Zap, 
   Activity, 
   FileCode, 
   ChevronRight, 
   Maximize, 
-  MousePointer2,
   Info,
   ZoomIn,
   ZoomOut
@@ -41,6 +39,7 @@ const App: React.FC = () => {
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [repoInfo, setRepoInfo] = useState<{ name: string; path: string } | null>(null);
   const [isSearching, setIsSearching] = useState(false);
   const [isMaximized, setIsMaximized] = useState(false);
@@ -49,7 +48,7 @@ const App: React.FC = () => {
     nodes: { file: true, symbol: true, module: true },
     edges: { calls: true, contains: true, imports: true, implements: true, exports: true, references: true, depends_on: true }
   });
-  const fgRef = useRef<any>();
+  const fgRef = useRef<any>(null);
 
   const urlParams = new URLSearchParams(window.location.search);
   const dbPort = urlParams.get('port') || '8000';
@@ -60,7 +59,7 @@ const App: React.FC = () => {
       try {
         await surreal.connect(`http://127.0.0.1:${dbPort}`);
         await surreal.signin({ username: 'root', password: 'root' });
-        await surreal.use({ ns: 'tokenzip', db: 'graph' });
+        await surreal.use({ namespace: 'tokenzip', database: 'graph' });
         setDb(surreal);
         (window as any).db = surreal;
         fetchData(surreal);
@@ -75,10 +74,17 @@ const App: React.FC = () => {
 
   const fetchData = async (surreal: Surreal) => {
     try {
+      // Check if tables exist first by querying INFO FOR DB
+      try {
+        await surreal.query(`INFO FOR DB;`);
+      } catch (e: any) {
+        // Ignore INFO errors if any
+      }
+
       // Progressive Loading: Load files, modules and their architectural relationships
       const res = await surreal.query<any[][]>(`
-        SELECT id, path FROM file LIMIT 5000;
-        SELECT id, name, path FROM module LIMIT 1000;
+        SELECT id, path, count(->tagged_with) > 0 AS has_memory FROM file LIMIT 5000;
+        SELECT id, name, path, count(->tagged_with) > 0 AS has_memory FROM module LIMIT 1000;
         SELECT id, in as source, out as target FROM imports, exports, depends_on, contains LIMIT 50000;
         SELECT name, path FROM repository LIMIT 1;
       `);
@@ -97,7 +103,8 @@ const App: React.FC = () => {
           name: n.path.split('/').pop() || n.path,
           path: n.path,
           val: 8,
-          color: '#6366f1'
+          color: '#6366f1',
+          hasMemory: n.has_memory
         })),
         ...modules.map((n: any) => ({
           id: n.id.toString(),
@@ -105,7 +112,8 @@ const App: React.FC = () => {
           name: n.name || n.path?.split('/').pop() || n.id.toString(),
           path: n.path,
           val: 12,
-          color: '#10b981'
+          color: '#10b981',
+          hasMemory: n.has_memory
         }))
       ];
 
@@ -120,15 +128,21 @@ const App: React.FC = () => {
         .filter(l => nodeIds.has(l.source) && nodeIds.has(l.target));
 
       setGraphData({ nodes, links });
+      setError(null);
       setLoading(false);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error fetching graph data:', err);
+      if (err.message && err.message.includes('not exist')) {
+        setError('Codebase not indexed. Please run `tokenzip parse` in your repository.');
+      } else {
+        setError(`Failed to load graph: ${err.message}`);
+      }
       setLoading(false);
     }
   };
 
   const [searchResults, setSearchResults] = useState<Node[]>([]);
-  const searchTimeout = useRef<any>();
+  const searchTimeout = useRef<any>(null);
 
   useEffect(() => {
     if (!searchTerm || !db) {
@@ -204,7 +218,6 @@ const App: React.FC = () => {
     }, 100);
   };
 
-  const [edgeCounts, setEdgeCounts] = useState<{ in: number, out: number }>({ in: 0, out: 0 });
 
   const visibleData = useMemo(() => {
     let nodes = graphData.nodes.filter(n => (filters.nodes as any)[n.type]);
@@ -250,13 +263,14 @@ const App: React.FC = () => {
     symbols: Node[];
     dependencies: Node[];
     dependants: Node[];
-  }>({ symbols: [], dependencies: [], dependants: [] });
+    annotations: any[];
+  }>({ symbols: [], dependencies: [], dependants: [], annotations: [] });
   const [isLoadingRelated, setIsLoadingRelated] = useState(false);
   const relatedReqRef = useRef(0);
 
   useEffect(() => {
     if (!selectedNode || !db) {
-      setRelatedData({ symbols: [], dependencies: [], dependants: [] });
+      setRelatedData({ symbols: [], dependencies: [], dependants: [], annotations: [] });
       return;
     }
 
@@ -281,6 +295,7 @@ const App: React.FC = () => {
           // 3. Incoming dependants (Optimized Traversal)
           SELECT id, name, path FROM (SELECT VALUE in FROM type::record($id)<-(imports, depends_on, contains));
         `, { id: selectedNode.id });
+
         const end = performance.now();
         
         console.log(`%c[Related] PRIMARY DATA DONE in ${(end - start).toFixed(1)}ms for ${selectedNode.id} (RID: ${rid})`, 'color: #10b981');
@@ -308,10 +323,24 @@ const App: React.FC = () => {
           path: n.path
         }));
 
+        let annotations: any[] = [];
+        try {
+          const annRes = await db.query<any[][]>(`
+            SELECT id, category, title, summary, priority, target_hash FROM annotation 
+            WHERE is_active = true 
+              AND count(->scoped_to->(file, module, repository, symbol)[WHERE id = type::record($id)]) > 0
+            ORDER BY priority DESC;
+          `, { id: selectedNode.id });
+          annotations = annRes[0] || [];
+        } catch (e: any) {
+          // Table might not exist yet
+        }
+
         setRelatedData({
           symbols: processNodes(res[1], 'symbol'),
           dependencies: processNodes(res[2]),
-          dependants: processNodes(res[3])
+          dependants: processNodes(res[3]),
+          annotations: annotations
         });
 
         // Fetch Stats in a separate, non-blocking call to keep the UI snappy
@@ -555,15 +584,10 @@ const App: React.FC = () => {
             }}
             nodeRelSize={4}
             nodeVal={(node: any) => (selectedNode && node.id === selectedNode.id) ? 12 : (node.val || 4)}
-            nodeCanvasObjectMode={node => node.id === selectedNode?.id ? 'before' : undefined}
+            nodeCanvasObjectMode={node => (node.id === selectedNode?.id || (node as any).hasMemory) ? 'before' : undefined}
             nodeCanvasObject={(node: any, ctx, globalScale) => {
               if (selectedNode && node.id === selectedNode.id) {
                 // Halo effect
-                const label = node.name;
-                const fontSize = 12/globalScale;
-                ctx.font = `${fontSize}px Inter`;
-                
-                // Draw glow
                 ctx.beginPath();
                 ctx.arc(node.x, node.y, 8, 0, 2 * Math.PI, false);
                 ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
@@ -575,6 +599,17 @@ const App: React.FC = () => {
                 ctx.strokeStyle = '#fff';
                 ctx.lineWidth = 2 / globalScale;
                 ctx.stroke();
+              }
+              if (node.hasMemory) {
+                // Gold dashed ring for Context Memory
+                ctx.beginPath();
+                const radius = (selectedNode && node.id === selectedNode.id) ? 10 : Math.sqrt(node.val || 4) + 3;
+                ctx.arc(node.x, node.y, radius, 0, 2 * Math.PI, false);
+                ctx.strokeStyle = '#fbbf24'; // amber-400
+                ctx.setLineDash([2, 2]);
+                ctx.lineWidth = 1.5 / Math.max(1, globalScale);
+                ctx.stroke();
+                ctx.setLineDash([]);
               }
             }}
             linkDirectionalArrowLength={(link: any) => link.type === 'imports' ? 5 : 3}
@@ -603,6 +638,20 @@ const App: React.FC = () => {
               return (selectedNode && (sId === selectedNode.id || tId === selectedNode.id)) ? 2 : 1;
             }}
           />
+
+          {error && (
+            <div className="error-overlay" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+              <div style={{ background: '#1f2937', padding: '32px', borderRadius: '12px', textAlign: 'center', border: '1px solid #374151', maxWidth: '450px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)' }}>
+                <Activity size={48} color="#ef4444" style={{ margin: '0 auto 20px', display: 'block' }} />
+                <h2 style={{ color: '#f3f4f6', marginBottom: '12px', fontSize: '1.5rem', fontWeight: '600' }}>Index Not Found</h2>
+                <p style={{ color: '#9ca3af', marginBottom: '24px', lineHeight: '1.6' }}>{error}</p>
+                <button className="action-btn" onClick={() => window.location.reload()} style={{ width: '100%', justifyContent: 'center', background: '#4f46e5', color: 'white', padding: '10px' }}>
+                  Retry Connection
+                </button>
+              </div>
+            </div>
+          )}
+
           <div className="overlay">
             <div className="panel sidebar glass-morphism">
               <div className="header">
@@ -756,13 +805,13 @@ const App: React.FC = () => {
                   </button>
                     <button className="action-btn secondary" onClick={() => {
                       const relatedEdges = graphData.links.filter(l => 
-                        (typeof l.source === 'object' ? l.source.id : l.source) === selectedNode.id || 
-                        (typeof l.target === 'object' ? l.target.id : l.target) === selectedNode.id
+                        (typeof l.source === 'object' ? (l.source as any).id : l.source) === selectedNode.id || 
+                        (typeof l.target === 'object' ? (l.target as any).id : l.target) === selectedNode.id
                       );
                       const relatedNodeIds = new Set([
                         selectedNode.id, 
-                        ...relatedEdges.map(l => typeof l.source === 'object' ? l.source.id : l.source), 
-                        ...relatedEdges.map(l => typeof l.target === 'object' ? l.target.id : l.target)
+                        ...relatedEdges.map(l => typeof l.source === 'object' ? (l.source as any).id : l.source), 
+                        ...relatedEdges.map(l => typeof l.target === 'object' ? (l.target as any).id : l.target)
                       ]);
                       setGraphData(prev => ({
                         nodes: prev.nodes.filter(n => relatedNodeIds.has(n.id)),
@@ -775,10 +824,32 @@ const App: React.FC = () => {
                 </div>
 
                 <div className={`related-sections ${isLoadingRelated ? 'loading' : ''}`}>
+                  {relatedData.annotations.length > 0 && (
+                    <div className="related-group cortex-memory">
+                      <div className="group-header">
+                        <label>CONTEXT MEMORY ({relatedData.annotations.length})</label>
+                      </div>
+                      <div className="item-list">
+                        {relatedData.annotations.map(ann => (
+                          <div key={ann.id.toString()} className="item-row memory-note">
+                            <div className="row-info">
+                              <div className="row-name" style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                                <span className={`priority-badge ${ann.priority}`} style={{ fontSize: '0.65rem', padding: '2px 6px', borderRadius: '4px', background: 'rgba(255,255,255,0.1)' }}>{ann.priority}</span>
+                                <span className="category-badge" style={{ fontSize: '0.65rem', color: '#a855f7' }}>{ann.category}</span>
+                                <strong style={{ color: '#fff' }}>{ann.title}</strong>
+                              </div>
+                              <div className="row-path" style={{ marginTop: '4px', color: '#9ca3af' }}>{ann.summary}</div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   <div className="related-group">
                     <div className="group-header">
                       <label>SYMBOLS ({relatedData.symbols.length})</label>
-                      <Info size={12} title="Click to add symbol to graph" />
+                      <span title="Click to add symbol to graph"><Info size={12} /></span>
                     </div>
                     <div className="item-grid">
                       {relatedData.symbols.map(s => (

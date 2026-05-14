@@ -64,7 +64,7 @@ exports[`MCP Integration Tests (Express.js Bench) > get_code_overview (lib direc
 
 exports[`MCP Integration Tests (Express.js Bench) > get_dependencies for lib/express.js 1`] = `
 {
-  "_token_count": 362,
+  "_token_count": 363,
   "_truncated": false,
   "dependencies": [
     {
