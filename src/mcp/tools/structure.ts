@@ -159,7 +159,8 @@ function pruneMetadata(node: any, verbose: boolean): any {
 async function executeStructureQuery(store: IStore, budget: TokenBudgetManager, args: any) {
   const depth = args.depth ?? 2;
   const adaptive = args.adaptive !== false;
-  const focusPath = args.path;
+  let focusPath = args.path;
+  if (focusPath === '.' || focusPath === './') focusPath = undefined; // Use root
   const showSymbols = args.showSymbols !== false;
 
   const repos = await store.query<any>(`SELECT id, name, type, path FROM repository LIMIT 1`);
@@ -508,22 +509,26 @@ export function createStructureTools(store: IStore, repoPath: string, budget: To
         required: ['file_path'],
       },
       handler: async (args: any) => {
-        // Find file node first to get its ID
-        const fileRes = await store.query<any>('SELECT id FROM file WHERE path = $path LIMIT 1', { path: args.file_path });
-        if (fileRes.length === 0) {
+        try {
+          // Find file node first to get its ID
+          const fileRes = await store.query<any>('SELECT id FROM file WHERE path = $path LIMIT 1', { path: args.file_path });
+          if (fileRes.length === 0) {
+            return {
+              content: [{ type: 'text', text: `File not found: ${args.file_path}` }],
+              isError: true
+            };
+          }
+          
+          const fileId = fileRes[0].id;
+          const symbols = await store.query('SELECT * FROM symbol WHERE fileId = $fileId', { fileId });
+          
+          const response = budget.truncate({ file: args.file_path, symbols });
           return {
-            content: [{ type: 'text', text: `File not found: ${args.file_path}` }],
-            isError: true
+            content: [{ type: 'text', text: JSON.stringify(response, null, 2) }],
           };
+        } catch (err: any) {
+          return { content: [{ type: 'text', text: err.message }], isError: true };
         }
-        
-        const fileId = fileRes[0].id;
-        const symbols = await store.query('SELECT * FROM symbol WHERE fileId = $fileId', { fileId });
-        
-        const response = budget.truncate({ file: args.file_path, symbols });
-        return {
-          content: [{ type: 'text', text: JSON.stringify(response, null, 2) }],
-        };
       },
     },
     {
@@ -541,55 +546,71 @@ export function createStructureTools(store: IStore, repoPath: string, budget: To
         required: ['targets'],
       },
       handler: async (args: any) => {
-        let targets: string[] = [];
-        if (Array.isArray(args.targets)) {
-          targets = args.targets;
-        } else if (typeof args.targets === 'string') {
-          targets = args.targets.split(',').map(t => t.trim());
-        }
-
-        const results: any[] = [];
-
-
-        for (const target of targets) {
-          // Check if it's a file
-          const fileRes = await store.query<any[]>('SELECT id, path, language FROM file WHERE path = $path LIMIT 1', { path: target });
-          if (fileRes.length > 0) {
-            const symbols = await store.query('SELECT name, kind, signature, docstring, isExported FROM symbol WHERE fileId = $fileId AND isExported = true', { fileId: fileRes[0].id });
-            results.push({
-              type: 'file',
-              path: target,
-              exports: symbols
-            });
-            continue;
+        try {
+          let targets: string[] = [];
+          if (Array.isArray(args.targets)) {
+            targets = args.targets;
+          } else if (typeof args.targets === 'string') {
+            targets = args.targets.split(',').map(t => t.trim());
           }
 
-          // Check if it's a symbol
-          const symbolRes = await store.query<any[]>(`
-            SELECT name, kind, signature, docstring, 
-                   (SELECT path FROM file WHERE id = $parent.fileId)[0].path as filePath 
-            FROM symbol WHERE name = $name
-          `, { name: target });
-          
-          if (symbolRes.length > 0) {
-            results.push({
-              type: 'symbol',
-              name: target,
-              definitions: symbolRes
-            });
-          } else {
-            results.push({
-              type: 'unknown',
-              target,
-              error: 'Not found or not exported'
-            });
-          }
-        }
+          const results: any[] = [];
 
-        const response = budget.truncate({ results });
-        return {
-          content: [{ type: 'text', text: JSON.stringify(response, null, 2) }],
-        };
+
+          for (const target of targets) {
+            // Check if it's a file
+            const fileRes = await store.query<any[]>('SELECT id, path, language FROM file WHERE path = $path LIMIT 1', { path: target });
+            if (fileRes.length > 0) {
+              const symbols = await store.query('SELECT id, name, kind, signature, docstring, isExported FROM symbol WHERE fileId = $fileId AND isExported = true', { fileId: fileRes[0].id });
+              results.push({
+                type: 'file',
+                id: fileRes[0].id,
+                path: target,
+                exports: symbols
+              });
+              continue;
+            }
+
+            // Check if it's a module
+            const modRes = await store.query<any[]>('SELECT id, path FROM module WHERE path = $path LIMIT 1', { path: target });
+            if (modRes.length > 0) {
+              results.push({
+                type: 'module',
+                id: modRes[0].id,
+                path: target
+              });
+              continue;
+            }
+
+            // Check if it's a symbol
+            const symbolRes = await store.query<any[]>(`
+              SELECT id, name, kind, signature, docstring, 
+                     (SELECT path FROM file WHERE id = $parent.fileId)[0].path as filePath 
+              FROM symbol WHERE name = $name
+            `, { name: target });
+            
+            if (symbolRes.length > 0) {
+              results.push({
+                type: 'symbol',
+                name: target,
+                definitions: symbolRes
+              });
+            } else {
+              results.push({
+                type: 'unknown',
+                target,
+                error: 'Not found or not exported'
+              });
+            }
+          }
+
+          const response = budget.truncate({ results });
+          return {
+            content: [{ type: 'text', text: JSON.stringify(response, null, 2) }],
+          };
+        } catch (err: any) {
+          return { content: [{ type: 'text', text: err.message }], isError: true };
+        }
       }
     }
   ];

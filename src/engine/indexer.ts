@@ -210,6 +210,7 @@ export class Indexer {
         isExported: sym.isExported,
         modifiers: sym.modifiers,
         metadata: sym.metadata,
+        docstring: sym.docstring,
         type: 'symbol',
         fileId: fileId
       };

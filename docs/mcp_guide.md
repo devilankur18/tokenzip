@@ -44,6 +44,7 @@ Add TokenZip to your Claude Desktop configuration (usually at `~/Library/Applica
 | `search_codebase` | Regex search across the entire codebase. |
 | `fuzzy_find_symbol` | Fuzzy search for symbol names. |
 | `get_file_symbols` | List all symbols (functions, classes, etc.) in a specific file. |
+| `fetch_symbol_metadata` | Fetch full signature, docstrings, and lines for a specific symbol ID. |
 | `get_dependencies` | Get the import dependencies for a specific file. |
 | `get_codebase_stats` | Overview of files, symbols, and knowledge graph density. |
 | `get_token_savings` | View ROI and efficiency metrics for the current session. |

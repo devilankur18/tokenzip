@@ -306,6 +306,9 @@ export function createCortexTools(store: IStore, repoPath: string, budget: Token
       },
       handler: async (args: any) => {
         try {
+          if (!args.id) {
+            return { content: [{ type: 'text', text: 'No note ID provided.' }], isError: true };
+          }
           await store.query('UPDATE type::record($id) SET is_active = false, removal_reason = $reason', { id: args.id, reason: args.reason });
           return { content: [{ type: 'text', text: `Note ${args.id} archived.` }] };
         } catch (err: any) {
@@ -420,7 +423,7 @@ export function createCortexTools(store: IStore, repoPath: string, budget: Token
           const moduleId = modRes[0].id;
 
           const filesQuery = `
-            SELECT path, (SELECT count() FROM <-imports WHERE out.type = 'file' AND in.id = $parent.id) as incoming_deps
+            SELECT path, (SELECT VALUE count() FROM <-imports WHERE out.type = 'file' GROUP ALL)[0] OR 0 as incoming_deps
             FROM file
             WHERE module_id = $moduleId
             ORDER BY incoming_deps ASC

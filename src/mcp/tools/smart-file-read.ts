@@ -33,76 +33,108 @@ export function createSmartFileReadTools(store: IStore, repoPath: string, budget
             type: 'boolean',
             default: false,
             description: 'Whether to include JSDoc/comments. Default is false to save tokens.'
+          },
+          range: {
+            type: 'object',
+            properties: {
+              start: { type: 'number' },
+              end: { type: 'number' }
+            },
+            description: 'Specific line range to read (1-indexed).'
           }
         },
         required: ['path']
       },
       handler: async (args: any) => {
-        const { path: filePath, mode = 'auto', target_symbol, max_tokens = 4000, include_docs = false } = args;
-        const absPath = path.resolve(repoPath, filePath);
+        try {
+          const { path: filePath, mode = 'auto', target_symbol, max_tokens = 4000, include_docs = false, range } = args;
+          const absPath = path.resolve(repoPath, filePath);
 
-        // 1. Check if file exists in DB
-        const fileRes = await store.query<any>('SELECT id, parse_status FROM file WHERE path = $path LIMIT 1', { path: filePath });
-        if (fileRes.length === 0) {
-          return { content: [{ type: 'text', text: `File not found in index: ${filePath}` }], isError: true };
-        }
-
-        const fileNode = fileRes[0];
-        if (fileNode.parse_status === 'failed') {
-          // Fallback to raw read (first 100 lines)
-          try {
-            const lines = fileCache.getRange(absPath, 1, 100);
-            return {
-              content: [{ type: 'text', text: lines.join('\n') }],
-              warnings: [`File ${filePath} failed to parse during indexing. Showing first 100 lines of raw source.`]
-            };
-          } catch (err: any) {
-            return { content: [{ type: 'text', text: `Error reading file: ${err.message}` }], isError: true };
+          // 1. Check if file exists in DB
+          const fileRes = await store.query<any>('SELECT id, parse_status FROM file WHERE path = $path LIMIT 1', { path: filePath });
+          if (fileRes.length === 0) {
+            return { content: [{ type: 'text', text: `File not found in index: ${filePath}` }], isError: true };
           }
-        }
 
-        const fileId = fileNode.id;
-        let finalMode = mode;
-
-        // 2. Resolve 'auto' mode
-        if (mode === 'auto') {
-          // Default to skeleton, but check if it's too big
-          const testRes = await executeStrategy('skeleton', filePath, absPath, fileId, store, target_symbol, budget, max_tokens, include_docs);
-          if (testRes.tokensUsed > max_tokens) {
-            finalMode = 'interface_only';
-          } else {
-            finalMode = 'skeleton';
+          const fileNode = fileRes[0];
+          if (fileNode.parse_status === 'failed') {
+            // Fallback to raw read (first 100 lines)
+            try {
+              const lines = fileCache.getRange(absPath, 1, 100);
+              return {
+                content: [{ type: 'text', text: lines.join('\n') }],
+                warnings: [`File ${filePath} failed to parse during indexing. Showing first 100 lines of raw source.`]
+              };
+            } catch (err: any) {
+              return { content: [{ type: 'text', text: `Error reading file: ${err.message}` }], isError: true };
+            }
           }
-        }
 
-        // 3. Execute requested strategy
-        let result = await executeStrategy(finalMode, filePath, absPath, fileId, store, target_symbol, budget, max_tokens, include_docs);
+          const fileId = fileNode.id;
 
-        // 3. Degrade logic for skeleton
-        if (mode === 'skeleton' && budget.estimate(result.content) > max_tokens) {
-          const degraded = await executeStrategy('interface_only', filePath, absPath, fileId, store, target_symbol, budget, max_tokens, include_docs);
+          // 2. Handle specific range request
+          if (range) {
+            try {
+              const lines = fileCache.getRange(absPath, range.start, range.end);
+              const response: any = budget.truncate({
+                content: lines.join('\n'),
+                mode_used: 'range',
+                range
+              });
+
+              // Inject Cortex
+              const cortex = await injectCortex(filePath, store, budget);
+              if (cortex) response._cortex = cortex;
+
+              return {
+                content: [{ type: 'text', text: JSON.stringify(response, null, 2) }]
+              };
+            } catch (err: any) {
+              return { content: [{ type: 'text', text: `Error reading range: ${err.message}` }], isError: true };
+            }
+          }
+
+          let finalMode = mode;
+
+          // 2. Resolve 'auto' mode
+          if (mode === 'auto') {
+            // Default to skeleton, but check if it's too big
+            const testRes = await executeStrategy('skeleton', filePath, absPath, fileId, store, target_symbol, budget, max_tokens, include_docs);
+            if (testRes.tokensUsed > max_tokens) {
+              finalMode = 'interface_only';
+            } else {
+              finalMode = 'skeleton';
+            }
+          }
+
+          // 3. Execute requested strategy
+          let result = await executeStrategy(finalMode, filePath, absPath, fileId, store, target_symbol, budget, max_tokens, include_docs);
+
+          // 3. Degrade logic for skeleton
+          if (mode === 'skeleton' && budget.estimate(result.content) > max_tokens) {
+            result = await executeStrategy('interface_only', filePath, absPath, fileId, store, target_symbol, budget, max_tokens, include_docs);
+            result.warnings = [...(result.warnings || []), 'Auto-downgraded from skeleton to interface_only due to token limit.'];
+          }
+
+          const response: any = budget.truncate({
+            content: result.content,
+            mode_used: result.mode_used,
+            symbol_count: result.symbol_count,
+            warnings: result.warnings || []
+          });
+
+          // 4. Inject Cortex memory
+          const cortex = await injectCortex(filePath, store, budget);
+          if (cortex) {
+            response._cortex = cortex;
+          }
+
           return {
-            ...degraded,
-            warnings: [...(degraded.warnings || []), 'Auto-downgraded from skeleton to interface_only due to token limit.']
+            content: [{ type: 'text', text: JSON.stringify(response, null, 2) }]
           };
+        } catch (err: any) {
+          return { content: [{ type: 'text', text: err.message }], isError: true };
         }
-
-        const response: any = budget.truncate({
-          content: result.content,
-          mode_used: result.mode_used,
-          symbol_count: result.symbol_count,
-          warnings: result.warnings || []
-        });
-
-        // 4. Inject Cortex memory
-        const cortex = await injectCortex(filePath, store, budget);
-        if (cortex) {
-          response._cortex = cortex;
-        }
-
-        return {
-          content: [{ type: 'text', text: JSON.stringify(response, null, 2) }]
-        };
       }
     }
   ];
