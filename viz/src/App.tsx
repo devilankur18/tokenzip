@@ -541,18 +541,67 @@ const App: React.FC = () => {
             ref={fgRef}
             graphData={visibleData}
             nodeLabel={(node: any) => `${node.type}: ${node.name}`}
-            nodeColor={(node: any) => node.color}
+            nodeColor={(node: any) => {
+              if (!selectedNode) return node.color;
+              const isSelected = node.id === selectedNode.id;
+              const isConnected = graphData.links.some(l => {
+                const sId = typeof l.source === 'object' ? (l.source as any).id : l.source;
+                const tId = typeof l.target === 'object' ? (l.target as any).id : l.target;
+                return (sId === selectedNode.id && tId === node.id) || (tId === selectedNode.id && sId === node.id);
+              });
+              if (isSelected) return '#fff';
+              if (isConnected) return node.color;
+              return `${node.color}33`; // Dim others
+            }}
             nodeRelSize={4}
+            nodeVal={(node: any) => (selectedNode && node.id === selectedNode.id) ? 12 : (node.val || 4)}
+            nodeCanvasObjectMode={node => node.id === selectedNode?.id ? 'before' : undefined}
+            nodeCanvasObject={(node: any, ctx, globalScale) => {
+              if (selectedNode && node.id === selectedNode.id) {
+                // Halo effect
+                const label = node.name;
+                const fontSize = 12/globalScale;
+                ctx.font = `${fontSize}px Inter`;
+                
+                // Draw glow
+                ctx.beginPath();
+                ctx.arc(node.x, node.y, 8, 0, 2 * Math.PI, false);
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+                ctx.fill();
+                
+                // Outer ring
+                ctx.beginPath();
+                ctx.arc(node.x, node.y, 6, 0, 2 * Math.PI, false);
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 2 / globalScale;
+                ctx.stroke();
+              }
+            }}
             linkDirectionalArrowLength={(link: any) => link.type === 'imports' ? 5 : 3}
             linkDirectionalArrowRelPos={1}
             linkCurvature={0.25}
-            linkDirectionalParticles={(link: any) => (link.type === 'calls' || link.type === 'imports') ? 2 : 0}
+            linkDirectionalParticles={(link: any) => {
+              if (!selectedNode) return (link.type === 'calls' || link.type === 'imports') ? 2 : 0;
+              const isRelevant = (link.source.id || link.source) === selectedNode.id || (link.target.id || link.target) === selectedNode.id;
+              return isRelevant && (link.type === 'calls' || link.type === 'imports') ? 4 : 0;
+            }}
             linkDirectionalParticleSpeed={0.005}
             linkDirectionalParticleWidth={1.5}
             onNodeClick={handleNodeClick}
             backgroundColor="#0d0d12"
-            linkColor={getLinkColor}
-            linkWidth={(link: any) => (selectedNode && (link.source.id === selectedNode.id || link.target.id === selectedNode.id)) ? 2 : 1}
+            linkColor={(link: any) => {
+              const base = getLinkColor(link);
+              if (!selectedNode) return base;
+              const sId = typeof link.source === 'object' ? (link.source as any).id : link.source;
+              const tId = typeof link.target === 'object' ? (link.target as any).id : link.target;
+              const isRelevant = sId === selectedNode.id || tId === selectedNode.id;
+              return isRelevant ? base : '#ffffff08';
+            }}
+            linkWidth={(link: any) => {
+              const sId = typeof link.source === 'object' ? (link.source as any).id : link.source;
+              const tId = typeof link.target === 'object' ? (link.target as any).id : link.target;
+              return (selectedNode && (sId === selectedNode.id || tId === selectedNode.id)) ? 2 : 1;
+            }}
           />
           <div className="overlay">
             <div className="panel sidebar glass-morphism">
