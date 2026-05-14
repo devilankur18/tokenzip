@@ -118,6 +118,7 @@ const App: React.FC = () => {
 
       if (repo) setRepoInfo(repo);
 
+      const nodes: Node[] = [
         ...files.map((n: any) => ({
           id: n.id.toString(),
           type: 'file',
