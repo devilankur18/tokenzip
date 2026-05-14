@@ -152,4 +152,90 @@ DEFINE FIELD OVERWRITE file_path ON usage_log TYPE option<string>;
 DEFINE FIELD OVERWRITE smart_tokens ON usage_log TYPE int;
 DEFINE FIELD OVERWRITE naive_tokens ON usage_log TYPE int;
 DEFINE FIELD OVERWRITE savings_percent ON usage_log TYPE float;
+
+// --- CORTEX: PERSISTENT KNOWLEDGE LAYER ---
+
+DEFINE TABLE OVERWRITE annotation SCHEMAFULL;
+DEFINE FIELD OVERWRITE type ON annotation TYPE string DEFAULT 'annotation';
+DEFINE FIELD OVERWRITE category ON annotation TYPE string
+  ASSERT $value IN [
+    'guideline',        // coding, testing, security, naming (use tags for sub-type)
+    'architecture',     // design patterns, architectural decisions, module overview
+    'gotcha',           // non-obvious behavior, edge cases, traps
+    'traversal_hint',   // reading orders, skip paths for modules
+    'workflow',         // deploy sequences, setup steps, operational procedures
+    'todo'              // persistent TODOs that survive sessions
+  ];
+
+// Content — split for token optimization
+DEFINE FIELD OVERWRITE title ON annotation TYPE string;
+DEFINE FIELD OVERWRITE summary ON annotation TYPE string;
+DEFINE FIELD OVERWRITE details ON annotation TYPE option<string>;
+
+// Provenance
+DEFINE FIELD OVERWRITE source ON annotation TYPE string DEFAULT 'developer'
+  ASSERT $value IN ['developer', 'agent', 'traversal'];
+DEFINE FIELD OVERWRITE confidence ON annotation TYPE float DEFAULT 1.0;
+DEFINE FIELD OVERWRITE tags ON annotation TYPE array DEFAULT [];
+
+// Priority & Lifecycle
+DEFINE FIELD OVERWRITE priority ON annotation TYPE string DEFAULT 'normal'
+  ASSERT $value IN ['critical', 'important', 'normal', 'low'];
+DEFINE FIELD OVERWRITE supersedes ON annotation TYPE option<record<annotation>>;
+DEFINE FIELD OVERWRITE is_active ON annotation TYPE bool DEFAULT true;
+DEFINE FIELD OVERWRITE removal_reason ON annotation TYPE option<string>;
+
+// Staleness Detection — snapshot of target file's content_hash at write time
+DEFINE FIELD OVERWRITE target_hash ON annotation TYPE option<string>;
+
+// Usage Tracking
+DEFINE FIELD OVERWRITE access_count ON annotation TYPE int DEFAULT 0;
+DEFINE FIELD OVERWRITE last_accessed ON annotation TYPE option<datetime>;
+
+// Traversal Hint Fields (only populated when category = 'traversal_hint')
+DEFINE FIELD OVERWRITE read_order ON annotation TYPE array DEFAULT [];
+DEFINE FIELD OVERWRITE skip_paths ON annotation TYPE array DEFAULT [];
+
+// Timestamps
+DEFINE FIELD OVERWRITE created_at ON annotation TYPE datetime DEFAULT time::now();
+DEFINE FIELD OVERWRITE updated_at ON annotation TYPE datetime DEFAULT time::now();
+DEFINE FIELD OVERWRITE session_id ON annotation TYPE option<string>;
+
+// --- Suggestion Table (structured improvement requests) ---
+
+DEFINE TABLE OVERWRITE suggestion SCHEMAFULL;
+DEFINE FIELD OVERWRITE type ON suggestion TYPE string DEFAULT 'suggestion';
+DEFINE FIELD OVERWRITE problem ON suggestion TYPE string;
+DEFINE FIELD OVERWRITE proposed ON suggestion TYPE string;
+DEFINE FIELD OVERWRITE kpi_impact ON suggestion TYPE option<string>;
+DEFINE FIELD OVERWRITE severity ON suggestion TYPE string DEFAULT 'medium'
+  ASSERT $value IN ['low', 'medium', 'high', 'critical'];
+DEFINE FIELD OVERWRITE related_targets ON suggestion TYPE array DEFAULT [];
+DEFINE FIELD OVERWRITE status ON suggestion TYPE string DEFAULT 'new'
+  ASSERT $value IN ['new', 'acknowledged', 'implemented', 'dismissed'];
+DEFINE FIELD OVERWRITE occurrence_count ON suggestion TYPE int DEFAULT 1;
+DEFINE FIELD OVERWRITE created_at ON suggestion TYPE datetime DEFAULT time::now();
+DEFINE FIELD OVERWRITE session_id ON suggestion TYPE option<string>;
+
+// --- Cortex Edges ---
+
+DEFINE TABLE OVERWRITE scoped_to SCHEMALESS
+  TYPE RELATION IN annotation OUT repository | module | file | symbol;
+DEFINE FIELD OVERWRITE scope_type ON scoped_to TYPE string
+  ASSERT $value IN ['codebase', 'module', 'file', 'symbol'];
+
+DEFINE TABLE OVERWRITE tagged_with SCHEMALESS
+  TYPE RELATION IN repository | module | file | symbol OUT annotation;
+
+DEFINE TABLE OVERWRITE relates_to SCHEMALESS
+  TYPE RELATION IN suggestion OUT repository | module | file | symbol;
+
+// --- Cortex Indexes ---
+
+DEFINE INDEX OVERWRITE idx_annotation_category ON annotation FIELDS category;
+DEFINE INDEX OVERWRITE idx_annotation_active ON annotation FIELDS is_active;
+DEFINE INDEX OVERWRITE idx_annotation_source ON annotation FIELDS source;
+DEFINE INDEX OVERWRITE idx_annotation_priority ON annotation FIELDS priority;
+DEFINE INDEX OVERWRITE idx_suggestion_status ON suggestion FIELDS status;
+DEFINE INDEX OVERWRITE idx_suggestion_severity ON suggestion FIELDS severity;
 `;

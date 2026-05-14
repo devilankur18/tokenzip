@@ -9,6 +9,7 @@ import { createNavigationTools } from './navigation.js';
 import { createContextTools } from './context.js';
 import { UsageTracker } from '../usage-tracker.js';
 import { createAnalyticsTools } from './analytics.js';
+import { createCortexTools } from './cortex.js';
 
 export function registerTools(store: IStore, repoPath: string, budget: TokenBudgetManager) {
   const tracker = new UsageTracker(store, repoPath, budget);
@@ -21,6 +22,7 @@ export function registerTools(store: IStore, repoPath: string, budget: TokenBudg
   tools.push(...createSearchTools(store, repoPath, budget));
   tools.push(...createNavigationTools(store, repoPath, budget));
   tools.push(...createContextTools(store, repoPath, budget));
+  tools.push(...createCortexTools(store, repoPath, budget));
   
   // Wrap existing tools with usage tracking
   const wrappedTools = tools.map(tool => ({

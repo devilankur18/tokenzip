@@ -42,13 +42,13 @@ export function createSmartFileReadTools(store: IStore, repoPath: string, budget
         const absPath = path.resolve(repoPath, filePath);
 
         // 1. Check if file exists in DB
-        const fileRes = await store.query<any>('SELECT id, parseStatus FROM file WHERE path = $path LIMIT 1', { path: filePath });
+        const fileRes = await store.query<any>('SELECT id, parse_status FROM file WHERE path = $path LIMIT 1', { path: filePath });
         if (fileRes.length === 0) {
           return { content: [{ type: 'text', text: `File not found in index: ${filePath}` }], isError: true };
         }
 
         const fileNode = fileRes[0];
-        if (fileNode.parseStatus === 'failed') {
+        if (fileNode.parse_status === 'failed') {
           // Fallback to raw read (first 100 lines)
           try {
             const lines = fileCache.getRange(absPath, 1, 100);
@@ -87,12 +87,18 @@ export function createSmartFileReadTools(store: IStore, repoPath: string, budget
           };
         }
 
-        const response = budget.truncate({
+        const response: any = budget.truncate({
           content: result.content,
           mode_used: result.mode_used,
           symbol_count: result.symbol_count,
           warnings: result.warnings || []
         });
+
+        // 4. Inject Cortex memory
+        const cortex = await injectCortex(filePath, store, budget);
+        if (cortex) {
+          response._cortex = cortex;
+        }
 
         return {
           content: [{ type: 'text', text: JSON.stringify(response, null, 2) }]
@@ -101,6 +107,7 @@ export function createSmartFileReadTools(store: IStore, repoPath: string, budget
     }
   ];
 }
+import { injectCortex } from './cortex.js';
 
 export async function calculateAllMetrics(
   relPath: string,
