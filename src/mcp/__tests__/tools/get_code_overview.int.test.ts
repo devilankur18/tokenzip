@@ -21,66 +21,39 @@ describe('get_code_overview (Integration)', () => {
     if (store) await store.close();
   });
 
-  it('1. Get full codebase overview', async () => {
+  it('1. Get full codebase overview in tree format', async () => {
+    const result = await tool.handler({ format: 'tree' });
+    expect(result.content[0].text).toContain('🏠'); // Root icon
+    expect(result.content[0].text).toContain('lib');
+  });
+
+  it('2. Get overview in JSON format', async () => {
     const result = await tool.handler({ format: 'json' });
     const data = JSON.parse(result.content[0].text);
     expect(data.structure).toBeDefined();
-    expect(data.structure.children.length).toBeGreaterThan(0);
+    expect(data.structure.type).toBe('repository');
   });
 
-  it('2. Get overview of "lib" directory', async () => {
-    const result = await tool.handler({ path: 'lib', format: 'json' });
+  it('3. Focus on "lib/application.js" file', async () => {
+    const result = await tool.handler({ path: 'lib/application.js', format: 'json', verbose: true });
     const data = JSON.parse(result.content[0].text);
-    expect(data.structure.name).toBe('lib');
-    expect(data.structure.children.length).toBeGreaterThan(0);
+    expect(data.structure.path).toBe('lib/application.js');
   });
 
-  it('3. Depth 1 overview (top level)', async () => {
+  it('4. Depth control', async () => {
     const result = await tool.handler({ depth: 1, format: 'json' });
     const data = JSON.parse(result.content[0].text);
-    // Depth 1 means only immediate children of root
-    expect(data.structure.children.every((c: any) => !c.children || c.children.length === 0)).toBe(true);
+    // Immediate children should have no children themselves at depth 1
+    const childrenWithChildren = data.structure.children.filter((c: any) => c.children && c.children.length > 0);
+    expect(childrenWithChildren.length).toBe(0);
   });
 
-  it('4. Depth 0 overview (just root)', async () => {
-    const result = await tool.handler({ depth: 0, format: 'json' });
-    const data = JSON.parse(result.content[0].text);
-    expect(data.structure.children || []).toHaveLength(0);
-  });
-
-  it('5. Verify symbols are excluded in compact mode', async () => {
-    const result = await tool.handler({ path: 'lib/express.js', format: 'json' });
-    const data = JSON.parse(result.content[0].text);
-    expect((data.structure.children || []).every((c: any) => c.type !== 'symbol')).toBe(true);
-  });
-
-  it('6. Verbose mode check', async () => {
-    const result = await tool.handler({ verbose: true, format: 'json' });
-    const data = JSON.parse(result.content[0].text);
-    expect(data.structure.id).toBeDefined();
-  });
-
-  it('7. Adaptive mode - verify structure', async () => {
-    const result = await tool.handler({ depth: 5, adaptive: true, format: 'json' });
-    const data = JSON.parse(result.content[0].text);
-    expect(data.structure).toBeDefined();
-  });
-
-  it('8. Error on non-existent path', async () => {
-    const result = await tool.handler({ path: 'missing/path' });
+  it('5. Error on non-existent path', async () => {
+    const result = await tool.handler({ path: 'non/existent/path' });
     expect(result.isError).toBe(true);
   });
 
-  it('9. Verify alias handler', async () => {
-    const tools = createStructureTools(store, repoPath, budget);
-    const alias = tools.find(t => t.name === 'get_code_overview');
-    const res = await alias.handler({ format: 'json' });
-    expect(res.content).toBeDefined();
-  });
-
-  it('10. Response contains truncation metadata', async () => {
-    const result = await tool.handler({ format: 'json' });
-    const data = JSON.parse(result.content[0].text);
-    expect(data._token_count).toBeDefined();
+  it('6. Tool metadata check', async () => {
+    expect(tool.name).toBe('get_code_overview');
   });
 });

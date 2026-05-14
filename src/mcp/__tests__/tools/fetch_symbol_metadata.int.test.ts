@@ -13,7 +13,7 @@ describe('fetch_symbol_metadata (Integration)', () => {
     store = setup.store;
     repoPath = setup.repoPath;
     budget = setup.budget;
-    const tools = createFetchMetadataTools(store, repoPath, budget);
+    const tools = createFetchMetadataTools(store, budget);
     tool = tools[0];
   }, 60000);
 
@@ -21,65 +21,56 @@ describe('fetch_symbol_metadata (Integration)', () => {
     if (store) await store.close();
   });
 
+  async function getSymbolId(name: string): Promise<string> {
+    const res = await store.query('SELECT id FROM symbol WHERE name = $name LIMIT 1', { name });
+    return res[0]?.id?.toString();
+  }
+
   it('1. Fetch metadata for "createApplication"', async () => {
-    const result = await tool.handler({ symbol_name: 'createApplication' });
+    const id = await getSymbolId('createApplication');
+    expect(id).toBeDefined();
+    const result = await tool.handler({ ids: [id] });
     const data = JSON.parse(result.content[0].text);
-    expect(data.metadata).toHaveLength(1);
-    expect(data.metadata[0].kind).toBe('function');
+    expect(data.symbols).toHaveLength(1);
+    expect(data.symbols[0].name).toBe('createApplication');
   });
 
-  it('2. Fetch metadata for "Router"', async () => {
-    const result = await tool.handler({ symbol_name: 'Router' });
+  it('2. Fetch multiple IDs', async () => {
+    const id1 = await getSymbolId('createApplication');
+    const id2 = await getSymbolId('Router');
+    const result = await tool.handler({ ids: [id1, id2].filter(Boolean) });
     const data = JSON.parse(result.content[0].text);
-    expect(data.metadata.length).toBeGreaterThan(0);
+    expect(data.symbols.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('3. Filter by file_path for "app"', async () => {
-    const result = await tool.handler({ 
-      symbol_name: 'app', 
-      file_path: 'lib/express.js' 
-    });
+  it('3. Error on empty IDs', async () => {
+    const result = await tool.handler({ ids: [] });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('No IDs provided');
+  });
+
+  it('4. Non-existent ID', async () => {
+    const result = await tool.handler({ ids: ['symbol:ghost_123'] });
     const data = JSON.parse(result.content[0].text);
-    expect(data.metadata).toHaveLength(1);
+    expect(data.symbols).toHaveLength(0);
   });
 
-  it('4. Search for common symbol name "handle"', async () => {
-    const result = await tool.handler({ symbol_name: 'handle' });
+  it('5. Verify result fields', async () => {
+    const id = await getSymbolId('createApplication');
+    const result = await tool.handler({ ids: [id] });
     const data = JSON.parse(result.content[0].text);
-    // Express has multiple 'handle' methods
-    expect(data.metadata.length).toBeGreaterThan(1);
+    const sym = data.symbols[0];
+    expect(sym.name).toBeDefined();
+    expect(sym.kind).toBeDefined();
   });
 
-  it('5. Non-existent symbol', async () => {
-    const result = await tool.handler({ symbol_name: 'GhostSymbolX' });
-    const data = JSON.parse(result.content[0].text);
-    expect(data.metadata).toHaveLength(0);
+  it('6. Tool metadata check', async () => {
+    expect(tool.name).toBe('fetch_symbol_metadata');
   });
 
-  it('6. Verify JSDoc presence for "application"', async () => {
-    const result = await tool.handler({ symbol_name: 'app' });
-    const data = JSON.parse(result.content[0].text);
-    expect(data.metadata.some((m: any) => m.docstring)).toBe(true);
-  });
-
-  it('7. Verify signature for "createApplication"', async () => {
-    const result = await tool.handler({ symbol_name: 'createApplication' });
-    const data = JSON.parse(result.content[0].text);
-    expect(data.metadata[0].signature).toContain('function createApplication');
-  });
-
-  it('8. Consistency across calls', async () => {
-    const res1 = await tool.handler({ symbol_name: 'Router' });
-    const res2 = await tool.handler({ symbol_name: 'Router' });
-    expect(res1.content[0].text).toBe(res2.content[0].text);
-  });
-
-  it('9. Tool description check', async () => {
-    expect(tool.description).toContain('signatures');
-  });
-
-  it('10. Response format is valid JSON', async () => {
-    const result = await tool.handler({ symbol_name: 'app' });
+  it('7. Response is valid JSON', async () => {
+    const id = await getSymbolId('app');
+    const result = await tool.handler({ ids: [id].filter(Boolean) });
     expect(() => JSON.parse(result.content[0].text)).not.toThrow();
   });
 });

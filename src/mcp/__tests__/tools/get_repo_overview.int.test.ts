@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { setupIntegrationTest } from '../test-setup.js';
 import { createStructureTools } from '../../tools/structure.js';
 
-describe('get_file_tree (Integration)', () => {
+describe('get_repo_overview (Integration)', () => {
   let store: any;
   let repoPath: string;
   let budget: any;
@@ -14,31 +14,22 @@ describe('get_file_tree (Integration)', () => {
     repoPath = setup.repoPath;
     budget = setup.budget;
     const tools = createStructureTools(store, repoPath, budget);
-    tool = tools.find(t => t.name === 'get_file_tree');
+    tool = tools.find(t => t.name === 'get_code_overview'); // Alias test
   }, 60000);
 
   afterAll(async () => {
     if (store) await store.close();
   });
 
-  it('1. Get root file tree', async () => {
-    const result = await tool.handler({});
+  it('1. Verify alias works identically to get_code_overview', async () => {
+    const result = await tool.handler({ format: 'tree' });
     expect(result.content[0].text).toContain('🏠');
     expect(result.content[0].text).toContain('lib');
   });
 
-  it('2. Focus on lib/application.js', async () => {
-    const result = await tool.handler({ path: 'lib/application.js' });
-    expect(result.content[0].text).toContain('application.js');
-  });
-
-  it('3. Depth check', async () => {
-    const result = await tool.handler({ depth: 0 });
-    // Depth 0 of root should just show the root name/icon
-    expect(result.content[0].text).not.toContain('index.js');
-  });
-
-  it('4. Tool metadata check', async () => {
-    expect(tool.name).toBe('get_file_tree');
+  it('2. JSON output check', async () => {
+    const result = await tool.handler({ format: 'json' });
+    const data = JSON.parse(result.content[0].text);
+    expect(data.structure).toBeDefined();
   });
 });

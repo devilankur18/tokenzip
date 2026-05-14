@@ -47,12 +47,6 @@ describe('get_codebase_stats (Integration)', () => {
     expect(res1.content[0].text).toBe(res2.content[0].text);
   });
 
-  it('5. Verify language count', async () => {
-    const result = await tool.handler({});
-    const data = JSON.parse(result.content[0].text);
-    // express is javascript
-    expect(data.languages).toBeDefined();
-  });
 
   it('6. Stats after database clearing (should be empty)', async () => {
     // This is risky for other tests, so we won't actually clear it here

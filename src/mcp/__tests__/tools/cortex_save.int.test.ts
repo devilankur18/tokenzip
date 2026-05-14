@@ -26,10 +26,11 @@ describe('cortex_save (Integration)', () => {
       category: 'architecture',
       title: 'Global Style Guide',
       summary: 'Use functional components everywhere.',
-      scope: 'global',
+      scope: 'codebase',
+      targets: ['*'],
       priority: 'important'
     });
-    expect(result.content[0].text).toContain('Saved');
+    expect(result.content[0].text).toContain('saved');
   });
 
   it('2. Save a file-specific gotcha', async () => {
@@ -41,7 +42,7 @@ describe('cortex_save (Integration)', () => {
       targets: ['lib/application.js'],
       priority: 'critical'
     });
-    expect(result.content[0].text).toContain('Saved');
+    expect(result.content[0].text).toContain('saved');
   });
 
   it('3. Save a module-level rule', async () => {
@@ -53,7 +54,7 @@ describe('cortex_save (Integration)', () => {
       targets: ['lib/router'],
       priority: 'important'
     });
-    expect(result.content[0].text).toContain('Saved');
+    expect(result.content[0].text).toContain('saved');
   });
 
   it('4. Update an existing note', async () => {
@@ -62,16 +63,18 @@ describe('cortex_save (Integration)', () => {
       category: 'architecture',
       title: 'Update Test',
       summary: 'Version 1',
-      scope: 'global'
+      scope: 'codebase',
+      targets: ['*']
     });
     // Update
     const result = await tool.handler({
       category: 'architecture',
       title: 'Update Test',
       summary: 'Version 2',
-      scope: 'global'
+      scope: 'codebase',
+      targets: ['*']
     });
-    expect(result.content[0].text).toContain('Saved');
+    expect(result.content[0].text).toContain('saved');
   });
 
   it('5. Save multiple targets at once', async () => {
@@ -82,7 +85,7 @@ describe('cortex_save (Integration)', () => {
       scope: 'file',
       targets: ['lib/request.js', 'lib/response.js']
     });
-    expect(result.content[0].text).toContain('Saved');
+    expect(result.content[0].text).toContain('saved');
   });
 
   it('6. Verify persistence via query (smoke)', async () => {
@@ -90,9 +93,10 @@ describe('cortex_save (Integration)', () => {
       category: 'architecture',
       title: 'Persistent Note',
       summary: 'Check if this exists.',
-      scope: 'global'
+      scope: 'codebase',
+      targets: ['*']
     });
-    const found = await store.query('SELECT * FROM cortex WHERE title = "Persistent Note"');
+    const found = await store.query('SELECT * FROM annotation WHERE title = "Persistent Note"');
     expect(found.length).toBeGreaterThan(0);
   });
 
@@ -112,10 +116,11 @@ describe('cortex_save (Integration)', () => {
       category: 'architecture',
       title: 'Low Priority Note',
       summary: 'S',
-      scope: 'global',
+      scope: 'codebase',
+      targets: ['*'],
       priority: 'low'
     });
-    expect(result.content[0].text).toContain('Saved');
+    expect(result.content[0].text).toContain('saved');
   });
 
   it('9. Tool metadata check', async () => {
@@ -127,7 +132,8 @@ describe('cortex_save (Integration)', () => {
       category: 'architecture',
       title: 'Msg Check',
       summary: 'S',
-      scope: 'global'
+      scope: 'codebase',
+      targets: ['*']
     });
     expect(typeof result.content[0].text).toBe('string');
   });

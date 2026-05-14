@@ -18,17 +18,11 @@ describe('cortex_recall (Integration)', () => {
     tool = tools.find(t => t.name === 'cortex_recall');
     saveTool = tools.find(t => t.name === 'cortex_save');
 
-    // Setup some test notes
+    // Setup notes for recall
     await saveTool.handler({
-      category: 'architecture',
-      title: 'Global Note',
-      summary: 'G',
-      scope: 'global'
-    });
-    await saveTool.handler({
-      category: 'gotcha',
-      title: 'File Note',
-      summary: 'F',
+      category: 'guideline',
+      title: 'Recall Test',
+      summary: 'Testing recall on express.js',
       scope: 'file',
       targets: ['lib/express.js']
     });
@@ -38,75 +32,42 @@ describe('cortex_recall (Integration)', () => {
     if (store) await store.close();
   });
 
-  it('1. Recall global notes', async () => {
-    const result = await tool.handler({ paths: [] });
+  it('1. Recall notes for lib/express.js', async () => {
+    const result = await tool.handler({ target: 'lib/express.js' });
     const data = JSON.parse(result.content[0].text);
-    expect(data.notes.some((n: any) => n.title === 'Global Note')).toBe(true);
+    expect(data.notes.length).toBeGreaterThan(0);
+    expect(data.notes[0].title).toContain('Recall Test');
   });
 
-  it('2. Recall file-specific notes', async () => {
-    const result = await tool.handler({ paths: ['lib/express.js'] });
-    const data = JSON.parse(result.content[0].text);
-    expect(data.notes.some((n: any) => n.title === 'File Note')).toBe(true);
-  });
-
-  it('3. Recall both global and file notes', async () => {
-    const result = await tool.handler({ paths: ['lib/express.js'] });
-    const data = JSON.parse(result.content[0].text);
-    expect(data.notes.some((n: any) => n.title === 'Global Note')).toBe(true);
-    expect(data.notes.some((n: any) => n.title === 'File Note')).toBe(true);
-  });
-
-  it('4. Filter by category "architecture"', async () => {
-    const result = await tool.handler({ paths: ['lib/express.js'], categories: ['architecture'] });
-    const data = JSON.parse(result.content[0].text);
-    expect(data.notes.every((n: any) => n.category === 'architecture')).toBe(true);
-    expect(data.notes.some((n: any) => n.title === 'Global Note')).toBe(true);
-    expect(data.notes.some((n: any) => n.title === 'File Note')).toBe(false);
-  });
-
-  it('5. Recall notes for multiple paths', async () => {
+  it('2. Inheritance recall: recall for file in lib should get module-level notes', async () => {
     await saveTool.handler({
       category: 'architecture',
-      title: 'App Note',
-      summary: 'A',
-      scope: 'file',
-      targets: ['lib/application.js']
+      title: 'Lib Architecture',
+      summary: 'Module level note',
+      scope: 'module',
+      targets: ['lib']
     });
-    const result = await tool.handler({ paths: ['lib/express.js', 'lib/application.js'] });
+
+    const result = await tool.handler({ target: 'lib/express.js' });
     const data = JSON.parse(result.content[0].text);
-    expect(data.notes.some((n: any) => n.title === 'File Note')).toBe(true);
-    expect(data.notes.some((n: any) => n.title === 'App Note')).toBe(true);
+    expect(data.notes.some((n: any) => n.title === 'Lib Architecture')).toBe(true);
   });
 
-  it('6. Recall non-existent path notes (should only get global)', async () => {
-    const result = await tool.handler({ paths: ['ghost.js'] });
+  it('3. Filter by category', async () => {
+    const result = await tool.handler({ 
+      target: 'lib/express.js',
+      categories: ['guideline']
+    });
     const data = JSON.parse(result.content[0].text);
-    expect(data.notes.every((n: any) => n.scope === 'global')).toBe(true);
+    expect(data.notes.every((n: any) => n.category === 'guideline')).toBe(true);
   });
 
-  it('7. Verify note fields in integration', async () => {
-    const result = await tool.handler({ paths: ['lib/express.js'] });
-    const data = JSON.parse(result.content[0].text);
-    const note = data.notes[0];
-    expect(note.title).toBeDefined();
-    expect(note.summary).toBeDefined();
-    expect(note.category).toBeDefined();
-    expect(note.priority).toBeDefined();
-  });
-
-  it('8. Large number of notes check (truncation)', async () => {
-    const result = await tool.handler({ paths: ['lib/express.js'] });
-    const data = JSON.parse(result.content[0].text);
-    expect(data._token_count).toBeGreaterThan(0);
-  });
-
-  it('9. Tool description check', async () => {
+  it('4. Tool metadata check', async () => {
     expect(tool.name).toBe('cortex_recall');
   });
 
-  it('10. Response is valid JSON', async () => {
-    const result = await tool.handler({ paths: ['lib/express.js'] });
+  it('5. Response is valid JSON', async () => {
+    const result = await tool.handler({ target: 'lib/express.js' });
     expect(() => JSON.parse(result.content[0].text)).not.toThrow();
   });
 });

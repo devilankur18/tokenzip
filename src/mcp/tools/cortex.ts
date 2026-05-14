@@ -98,6 +98,9 @@ export function createCortexTools(store: IStore, repoPath: string, budget: Token
       },
       handler: async (args: any) => {
         try {
+          if (!args.targets || args.targets.length === 0) {
+            return { content: [{ type: 'text', text: 'Error: targets array cannot be empty.' }], isError: true };
+          }
           // 1. Get current content hash if targets include files
           let targetHash: string | undefined;
           if (args.scope === 'file' && args.targets.length > 0) {
@@ -335,15 +338,16 @@ export function createCortexTools(store: IStore, repoPath: string, budget: Token
             problem: args.problem,
             proposed: args.proposed_solution,
             severity: args.severity,
-            related_targets: args.related_targets || [],
+            related_targets: args.related_targets,
             status: 'new'
           };
 
-          for (const key of Object.keys(suggestionData)) {
+          // Remove undefined or null fields
+          Object.keys(suggestionData).forEach(key => {
             if (suggestionData[key] === undefined || suggestionData[key] === null) {
               delete suggestionData[key];
             }
-          }
+          });
 
           const [suggestion] = await store.query<any>('CREATE suggestion CONTENT $data', {
             data: suggestionData
