@@ -14,6 +14,7 @@ import { doctorCommand } from './commands/doctor.js';
 import { debugCommand } from './commands/debug.js';
 import { statsCommand } from './commands/stats.js';
 import { visualizeCommand } from './commands/visualize.js';
+import { cortexCommand } from './commands/cortex.js';
 
 const program = new Command();
 
@@ -49,6 +50,7 @@ program.addCommand(reportCommand);
 program.addCommand(debugCommand);
 program.addCommand(statsCommand);
 program.addCommand(visualizeCommand);
+program.addCommand(cortexCommand);
 
 program.parseAsync(process.argv).catch(err => {
   console.error(err);

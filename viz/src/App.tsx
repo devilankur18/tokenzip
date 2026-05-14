@@ -11,7 +11,11 @@ import {
   Maximize, 
   Info,
   ZoomIn,
-  ZoomOut
+  ZoomOut,
+  Plus,
+  BookOpen,
+  Edit2,
+  Trash2
 } from 'lucide-react';
 import './App.css';
 
@@ -49,6 +53,13 @@ const App: React.FC = () => {
     edges: { calls: true, contains: true, imports: true, implements: true, exports: true, references: true, depends_on: true }
   });
   const fgRef = useRef<any>(null);
+
+  const [isNoteModalOpen, setIsNoteModalOpen] = useState(false);
+  const [noteForm, setNoteForm] = useState<{ id: string | null, title: string, summary: string, category: string, priority: string }>({ 
+    id: null, title: '', summary: '', category: 'guideline', priority: 'normal' 
+  });
+  const [refreshKey, setRefreshKey] = useState(0);
+  const triggerRefresh = () => setRefreshKey(k => k + 1);
 
   const urlParams = new URLSearchParams(window.location.search);
   const dbPort = urlParams.get('port') || '8000';
@@ -377,7 +388,7 @@ const App: React.FC = () => {
     };
 
     fetchRelated();
-  }, [selectedNode?.id, db]);
+  }, [selectedNode?.id, db, refreshKey]);
 
   const handleNodeClick = (node: any) => {
     const existingNode = graphData.nodes.find(n => n.id === (node.id || node));
@@ -489,6 +500,98 @@ const App: React.FC = () => {
       });
     } catch (err) {
       console.error('Failed to expand file symbols:', err);
+    }
+  };
+
+  const generateTraversalPlan = async (node: Node) => {
+    if (!db) return;
+    try {
+      await db.query(`
+        LET $readOrder = (
+          SELECT path, (SELECT count() FROM <-imports WHERE out.type = 'file' AND in.id = $parent.id) as incoming_deps
+          FROM (SELECT VALUE out FROM type::record($id)->contains WHERE out.type = 'file')
+          ORDER BY incoming_deps ASC
+        ).path;
+        LET $ann = CREATE annotation CONTENT {
+          category: 'traversal_hint',
+          title: 'Auto-generated Traversal Plan',
+          summary: 'Optimal read order from leaves to roots.',
+          priority: 'normal',
+          confidence: 0.9,
+          read_order: $readOrder,
+          is_active: true
+        };
+        LET $target = type::record($id);
+        RELATE $ann->scoped_to->$target SET scope_type = 'module';
+        RELATE $target->tagged_with->$ann;
+      `, { id: node.id });
+      alert('Traversal Plan generated and saved!');
+      triggerRefresh();
+    } catch (err: any) {
+      console.error('Failed to generate traversal plan:', err);
+      alert('Failed to generate traversal plan: ' + err.message);
+    }
+  };
+
+  const handleSaveNote = async () => {
+    if (!db || !selectedNode) return;
+    try {
+      if (noteForm.id) {
+        // UPDATE existing note
+        await db.query(`
+          UPDATE type::record($id) SET
+            category = $category,
+            title = $title,
+            summary = $summary,
+            priority = $priority
+        `, {
+          id: noteForm.id,
+          category: noteForm.category,
+          title: noteForm.title,
+          summary: noteForm.summary,
+          priority: noteForm.priority
+        });
+      } else {
+        // CREATE new note
+        await db.query(`
+          LET $ann = CREATE annotation CONTENT {
+            category: $category,
+            title: $title,
+            summary: $summary,
+            priority: $priority,
+            confidence: 1.0,
+            is_active: true,
+            source: 'developer'
+          };
+          LET $target = type::record($nodeId);
+          RELATE $ann->scoped_to->$target SET scope_type = $scope;
+          RELATE $target->tagged_with->$ann;
+        `, {
+          category: noteForm.category,
+          title: noteForm.title,
+          summary: noteForm.summary,
+          priority: noteForm.priority,
+          nodeId: selectedNode.id,
+          scope: selectedNode.type
+        });
+      }
+      setIsNoteModalOpen(false);
+      setNoteForm({ id: null, title: '', summary: '', category: 'guideline', priority: 'normal' });
+      triggerRefresh();
+    } catch (err: any) {
+      console.error('Failed to save note:', err);
+      alert('Failed to save note: ' + err.message);
+    }
+  };
+
+  const handleDeleteNote = async (annId: string) => {
+    if (!db || !selectedNode || !window.confirm('Are you sure you want to delete this note?')) return;
+    try {
+      await db.query('DELETE type::record($id)', { id: annId });
+      triggerRefresh();
+    } catch (err: any) {
+      console.error('Failed to delete note:', err);
+      alert('Failed to delete note: ' + err.message);
     }
   };
 
@@ -800,6 +903,17 @@ const App: React.FC = () => {
                       <Zap size={16} /> Show Internal Symbols
                     </button>
                   )}
+                  {selectedNode.type === 'module' && (
+                    <button className="action-btn primary" onClick={() => generateTraversalPlan(selectedNode)}>
+                      <BookOpen size={16} /> Gen. Traversal Plan
+                    </button>
+                  )}
+                  <button className="action-btn secondary" onClick={() => {
+                    setNoteForm({ id: null, title: '', summary: '', category: 'guideline', priority: 'normal' });
+                    setIsNoteModalOpen(true);
+                  }}>
+                    <Plus size={16} /> Tag Context Memory
+                  </button>
                   <button className="action-btn secondary" onClick={() => expandNeighbors(selectedNode)}>
                     <Maximize2 size={16} /> Expand Neighborhood
                   </button>
@@ -830,15 +944,32 @@ const App: React.FC = () => {
                         <label>CONTEXT MEMORY ({relatedData.annotations.length})</label>
                       </div>
                       <div className="item-list">
-                        {relatedData.annotations.map(ann => (
-                          <div key={ann.id.toString()} className="item-row memory-note">
-                            <div className="row-info">
+                         {relatedData.annotations.map(ann => (
+                          <div key={ann.id.toString()} className="item-row memory-note" style={{ position: 'relative' }}>
+                            <div className="row-info" style={{ flex: 1 }}>
                               <div className="row-name" style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                                 <span className={`priority-badge ${ann.priority}`} style={{ fontSize: '0.65rem', padding: '2px 6px', borderRadius: '4px', background: 'rgba(255,255,255,0.1)' }}>{ann.priority}</span>
                                 <span className="category-badge" style={{ fontSize: '0.65rem', color: '#a855f7' }}>{ann.category}</span>
                                 <strong style={{ color: '#fff' }}>{ann.title}</strong>
                               </div>
                               <div className="row-path" style={{ marginTop: '4px', color: '#9ca3af' }}>{ann.summary}</div>
+                            </div>
+                            <div className="row-actions" style={{ display: 'flex', gap: '8px', opacity: 0.6 }}>
+                              <button className="icon-btn tiny" onClick={() => {
+                                setNoteForm({
+                                  id: ann.id.toString(),
+                                  title: ann.title,
+                                  summary: ann.summary,
+                                  category: ann.category,
+                                  priority: ann.priority
+                                });
+                                setIsNoteModalOpen(true);
+                              }}>
+                                <Edit2 size={12} />
+                              </button>
+                              <button className="icon-btn tiny delete" onClick={() => handleDeleteNote(ann.id.toString())}>
+                                <Trash2 size={12} />
+                              </button>
                             </div>
                           </div>
                         ))}
@@ -980,6 +1111,51 @@ const App: React.FC = () => {
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {isNoteModalOpen && selectedNode && (
+        <div className="modal-overlay" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000 }}>
+          <div className="modal-content" style={{ background: '#1f2937', padding: '32px', borderRadius: '12px', border: '1px solid #374151', width: '400px', display: 'flex', flexDirection: 'column', gap: '16px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)' }}>
+            <h2 style={{ color: '#f3f4f6', margin: 0, fontSize: '1.5rem' }}>{noteForm.id ? 'Edit Context Memory' : 'Add Context Memory'}</h2>
+            <p style={{ color: '#9ca3af', margin: 0, fontSize: '0.875rem' }}>Target: <strong style={{color: '#fff'}}>{selectedNode.name}</strong></p>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '8px' }}>
+              <label style={{ color: '#d1d5db', fontSize: '0.875rem', fontWeight: 500 }}>Title</label>
+              <input type="text" value={noteForm.title} onChange={e => setNoteForm(f => ({ ...f, title: e.target.value }))} style={{ background: '#111827', border: '1px solid #374151', color: '#fff', padding: '10px', borderRadius: '6px' }} placeholder="E.g., Authentication Gotcha" />
+            </div>
+
+            <div style={{ display: 'flex', gap: '16px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: 1 }}>
+                <label style={{ color: '#d1d5db', fontSize: '0.875rem', fontWeight: 500 }}>Category</label>
+                <select value={noteForm.category} onChange={e => setNoteForm(f => ({ ...f, category: e.target.value }))} style={{ background: '#111827', border: '1px solid #374151', color: '#fff', padding: '10px', borderRadius: '6px' }}>
+                  <option value="guideline">Guideline</option>
+                  <option value="gotcha">Gotcha</option>
+                  <option value="architecture">Architecture</option>
+                  <option value="todo">TODO</option>
+                </select>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: 1 }}>
+                <label style={{ color: '#d1d5db', fontSize: '0.875rem', fontWeight: 500 }}>Priority</label>
+                <select value={noteForm.priority} onChange={e => setNoteForm(f => ({ ...f, priority: e.target.value }))} style={{ background: '#111827', border: '1px solid #374151', color: '#fff', padding: '10px', borderRadius: '6px' }}>
+                  <option value="critical">Critical</option>
+                  <option value="important">Important</option>
+                  <option value="normal">Normal</option>
+                  <option value="low">Low</option>
+                </select>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <label style={{ color: '#d1d5db', fontSize: '0.875rem', fontWeight: 500 }}>Summary</label>
+              <textarea value={noteForm.summary} onChange={e => setNoteForm(f => ({ ...f, summary: e.target.value }))} style={{ background: '#111827', border: '1px solid #374151', color: '#fff', padding: '10px', borderRadius: '6px', minHeight: '80px', resize: 'vertical' }} placeholder="Briefly describe the context..." />
+            </div>
+
+            <div style={{ display: 'flex', gap: '12px', marginTop: '16px' }}>
+              <button className="action-btn secondary" onClick={() => setIsNoteModalOpen(false)} style={{ flex: 1, justifyContent: 'center' }}>Cancel</button>
+              <button className="action-btn primary" onClick={handleSaveNote} style={{ flex: 1, justifyContent: 'center' }} disabled={!noteForm.title || !noteForm.summary}>Save Note</button>
+            </div>
           </div>
         </div>
       )}
