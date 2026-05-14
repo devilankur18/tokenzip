@@ -24,13 +24,13 @@ We are looking for extractors for **Python, Go, Rust, and Java**. Check out `src
 Have an idea for a tool that makes AI agents smarter? Propose it in an issue!
 
 ### 3. Fixing Bugs
-Check the [GitHub Issues](https://github.com/ankur/tokenzip/issues) for any open bugs.
+Check the [GitHub Issues](https://github.com/devilankur18/tokenzip/issues) for any open bugs.
 
 ## 🛠️ Development Setup
 
 1.  **Clone the repo**:
     ```bash
-    git clone https://github.com/ankur/tokenzip.git
+    git clone https://github.com/devilankur18/tokenzip.git
     cd tokenzip
     ```
 

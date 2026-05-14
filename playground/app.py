@@ -88,4 +88,4 @@ with col2:
         st.info("Click the button to see the compressed output.")
 
 st.markdown("---")
-st.markdown("Ready to run this on your own repo? [Check out the Docs](https://github.com/ankur/tokenzip)")
+st.markdown("Ready to run this on your own repo? [Check out the Docs](https://github.com/devilankur18/tokenzip)")
