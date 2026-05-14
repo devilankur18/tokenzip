@@ -232,7 +232,8 @@ export class SurrealStore implements IStore {
     const relationTables = new Set([
       'contains', 'imports', 'exports', 'calls', 'implements', 
       'inherits', 'modifies', 'reads', 'references', 'depends_on', 
-      'modified_in', 'foreign_key', 'column_of', 'diagram_edge', 'workflow_transition'
+      'modified_in', 'foreign_key', 'column_of', 'diagram_edge', 'workflow_transition',
+      'scoped_to', 'tagged_with', 'relates_to'
     ]);
 
     for (const [tableName, _] of Object.entries(tables)) {

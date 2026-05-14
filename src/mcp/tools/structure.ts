@@ -369,18 +369,44 @@ async function executeStructureQuery(store: IStore, budget: TokenBudgetManager, 
   const format = args.format ?? (adaptive ? 'tree' : 'json');
   const verbose = args.verbose === true || args.verbose === 'true';
 
+  // 5. Inject Cortex memory
+  const targetPath = focusPath || '.';
+  const cortex = await injectCortex(targetPath, store, budget);
+
   if (format === 'tree') {
-    return { content: [{ type: 'text', text: formatTree(targetTree) }] };
+    let treeText = formatTree(targetTree);
+    if (cortex) {
+      treeText += '\n\n' + formatCortexFooter(cortex);
+    }
+    return { content: [{ type: 'text', text: treeText }] };
   }
 
   if (format === 'markdown') {
-    return { content: [{ type: 'text', text: formatMarkdown(targetTree) }] };
+    let mdText = formatMarkdown(targetTree);
+    if (cortex) {
+      mdText += '\n\n' + formatCortexFooter(mdText);
+    }
+    return { content: [{ type: 'text', text: mdText }] };
   }
 
   const prunedTree = pruneMetadata(targetTree, verbose);
-  const response = budget.truncate({ structure: prunedTree });
+  const response: any = budget.truncate({ structure: prunedTree });
+  if (cortex) {
+    response._cortex = cortex;
+  }
   return { content: [{ type: 'text', text: JSON.stringify(response, null, 2) }] };
 }
+
+function formatCortexFooter(cortex: any): string {
+  const lines = ['--- CORTEX MEMORY ---'];
+  cortex.notes.forEach((n: string) => lines.push(`• ${n}`));
+  if (cortex.more_available) {
+    lines.push('... (use cortex_recall for more)');
+  }
+  return lines.join('\n');
+}
+
+import { injectCortex } from './cortex.js';
 
 export function createStructureTools(store: IStore, repoPath: string, budget: TokenBudgetManager) {
   return [
