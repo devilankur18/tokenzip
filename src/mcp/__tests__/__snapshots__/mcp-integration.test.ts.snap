@@ -27,14 +27,6 @@ exports[`MCP Integration Tests (Express.js Bench) > find_references for "createA
 
 exports[`MCP Integration Tests (Express.js Bench) > get_code_overview (lib directory) 1`] = `
 {
-  "_cortex": {
-    "more_available": true,
-    "notes": [
-      "[IMPORTANT·architecture] Lib Module Rule: All files in lib must be exported via express.js",
-      "[IMPORTANT·architecture] Lib Module Rule: All files in lib must be exported via express.js",
-      "[IMPORTANT·architecture] Lib Module Rule: All files in lib must be exported via express.js",
-    ],
-  },
   "_token_count": 61,
   "_truncated": false,
   "structure": {
@@ -72,7 +64,7 @@ exports[`MCP Integration Tests (Express.js Bench) > get_code_overview (lib direc
 
 exports[`MCP Integration Tests (Express.js Bench) > get_dependencies for lib/express.js 1`] = `
 {
-  "_token_count": 362,
+  "_token_count": 363,
   "_truncated": false,
   "dependencies": [
     {
@@ -558,7 +550,7 @@ exports[`MCP Integration Tests (Express.js Bench) > query_symbol "createApplicat
 
 exports[`MCP Integration Tests (Express.js Bench) > search_codebase for "createApplication" 1`] = `
 {
-  "_token_count": 41,
+  "_token_count": 46,
   "_truncated": false,
   "matchCount": 1,
   "matches": [
@@ -566,6 +558,7 @@ exports[`MCP Integration Tests (Express.js Bench) > search_codebase for "createA
       "filePath": "lib/express.js",
       "id": "symbol:d4499403_createApplication_function_36",
       "kind": "function",
+      "language": "typescript",
       "name": "createApplication",
     },
   ],
@@ -575,14 +568,6 @@ exports[`MCP Integration Tests (Express.js Bench) > search_codebase for "createA
 
 exports[`MCP Integration Tests (Express.js Bench) > smart_file_read (skeleton) lib/express.js 1`] = `
 {
-  "_cortex": {
-    "more_available": true,
-    "notes": [
-      "[IMPORTANT·architecture] Lib Module Rule: All files in lib must be exported via express.js",
-      "[IMPORTANT·architecture] Lib Module Rule: All files in lib must be exported via express.js",
-      "[IMPORTANT·architecture] Test Architecture Note: This is a test note for lib/express.js",
-    ],
-  },
   "_token_count": 244,
   "_truncated": false,
   "content": "/*!

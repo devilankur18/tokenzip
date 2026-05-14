@@ -5,15 +5,21 @@
 **The Semantic Compression Layer for AI Agents.**  
 Transform any codebase into a queryable knowledge graph and stop wasting tokens on implementation details.
 
+![TokenZip Hero Comparison](https://raw.githubusercontent.com/ankur/tokenzip/main/assets/hero_comparison.png)
+
 [![npm version](https://img.shields.io/npm/v/tokenzip.svg)](https://www.npmjs.com/package/tokenzip)
 [![Node.js >= 18](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg)](https://nodejs.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Build Status](https://img.shields.io/github/actions/workflow/status/ankur/tokenzip/ci.yml?branch=main)](https://github.com/ankur/tokenzip/actions)
 
 </div>
 
 ---
 
-## 💡 The Idea
+## 🔍 What is TokenZip? (AI-Native Code Intelligence)
+
+TokenZip is a **Graph-Based Code Intelligence Engine** designed to solve the "Context Bloat" problem in AI-assisted development. By indexing your codebase into a relational knowledge graph, it allows agents like **Claude Desktop**, **Cursor**, and **Copilot** to navigate complex repositories with 90% fewer tokens.
+
 
 AI agents (Claude, Cursor, Copilot) are context-starved. Feeding them entire source files is like giving someone a whole book when they only need the table of contents and a few specific chapters.
 
@@ -117,7 +123,19 @@ Vectorised Search and "context-stuffing" are like giving an engineer a stack of 
 
 ---
 
-## ⚡ Quick Start
+## 🏗️ Technical Architecture & Memory Mesh
+
+TokenZip builds a **Federated Memory** of your code. Instead of raw text, it stores symbols, relationships, and call edges in a high-performance **SurrealDB** graph.
+
+![Architecture Diagram](https://mermaid.ink/svg/pako:eNptkE1OwzAQha8yeY2-QEKLViyQCAlSAsSCSCyInSAnTWr-kR_HUVVvxyE4ClfhyByDozB2_KqqV_Pmzbzf-GTWlZpWSTuU3qE0Hsr_qWqUvldqlrZHeT-UPVl-V-omXoAyrYfSM5TOIzk4vU2T6Xv9v5fW6G6U-v78OaXhVFr-XKmZtD3K-6HsyfKnUv_S0uiofD7K_0Yp_R-Umn5Wap60Xcp7pfx7pfxzpf6vUi6T_P9Zyn-SUnov1V97W_n9kP-XUko7pMypNMc_Bf49yI2eSu_I0p2_X8vfoVfT6X858g_vK2F8)
+
+For a deep dive into how the "Memory Mesh" works, see our [Architecture Guide](docs/architecture.md).
+
+---
+
+## ⚡ Quick Start (Zero to Running in 30s)
+
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ankur/tokenzip/blob/main/notebooks/tokenzip_demo.ipynb)
 
 ### 1. Install
 ```bash
@@ -207,10 +225,16 @@ For more details, see the [MCP Guide](docs/mcp_guide.md).
 
 Set the `TOKENZIP_CWD` environment variable in your `.zshrc` or `.bashrc` to run commands from anywhere:
 ```bash
-export TOKENZIP_CWD=/path/to/your/project
-```
+---
+
+## 🏠 Local LLM Support (Ollama / LocalAI)
+
+TokenZip is the perfect companion for **Local LLMs** where context windows are often constrained. By skeletonizing files, you can fit massive context into models like `Qwen-Coder` or `CodeLlama` running on your own hardware.
+
+Check out the [Local LLM Guide](docs/local_llm_guide.md) for optimized settings.
 
 ---
+
 
 ## 🏗️ Project Status & Roadmap
 
@@ -225,12 +249,16 @@ export TOKENZIP_CWD=/path/to/your/project
 
 ---
 
-## 🛠️ Development & Testing
-
-For instructions on how to run tests, contribute to the engine, or benchmark performance, please see [TESTING.md](TESTING.md).
-
 ---
 
-## 📄 License
+## 🤝 Contributing & Community
+
+We welcome contributions of all sizes! 
+- **Add a Language**: We need extractors for Python, Go, and Rust.
+- **Improve Tools**: Help us refine the MCP tools for better agentic reasoning.
+
+Please see [CONTRIBUTING.md](CONTRIBUTING.md) to get started.
+
+## 📜 License
 
 MIT © [Ankur Agarwal](https://github.com/devilankur18)
