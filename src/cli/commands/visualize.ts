@@ -4,6 +4,7 @@ import { SurrealStore } from '../../storage/surreal/store.js';
 import { resolveDbPath } from '../resolve-db.js';
 import { spawn } from 'child_process';
 import fs from 'fs';
+import { startDemoServer } from '../../server/demo.js';
 
 export const visualizeCommand = new Command('visualize')
   .alias('viz')
@@ -24,6 +25,19 @@ export const visualizeCommand = new Command('visualize')
       const dbPort = fs.readFileSync(portPath, 'utf8').trim();
       
       console.log(`✅ Knowledge graph active on port ${dbPort}`);
+      
+      // Fetch current repo info for demo mode
+      const repos = await store.query<any>('SELECT name, root FROM repository LIMIT 1') || [];
+      const currentRepo = repos[0];
+      
+      console.log('🚀 Starting Demo API...');
+      startDemoServer(6001, currentRepo ? {
+        name: currentRepo.name,
+        path: currentRepo.root,
+        store: store
+      } : undefined).catch(err => {
+        console.error('⚠️ Failed to start Demo API:', err.message);
+      });
       
       // Resolve viz directory
       const currentDir = path.dirname(new URL(import.meta.url).pathname);

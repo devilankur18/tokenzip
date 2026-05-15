@@ -176,7 +176,7 @@ async function executeStructureQuery(store: IStore, budget: TokenBudgetManager, 
   const foldThreshold = totalFiles > 1000 ? 50 : 8;
 
   // Fetch all contains edges
-  const allEdges = await store.query<any[]>(`SELECT * FROM contains`) || [];
+  const allEdges = await store.query<any>(`SELECT * FROM contains`) || [];
 
   // Collect all unique node IDs
   const nodeIds = new Set<string>();
@@ -195,7 +195,7 @@ async function executeStructureQuery(store: IStore, budget: TokenBudgetManager, 
     return id;
   });
 
-  const allNodes = (await store.query<any[]>(`SELECT * FROM $ids`, { ids: idsAsRecords })) || [];
+  const allNodes = (await store.query<any>(`SELECT * FROM $ids`, { ids: idsAsRecords })) || [];
   
   // 1. Build the node map and identify the root
   const nodeMap = new Map<string, any>();
@@ -551,7 +551,7 @@ export function createStructureTools(store: IStore, repoPath: string, budget: To
           if (Array.isArray(args.targets)) {
             targets = args.targets;
           } else if (typeof args.targets === 'string') {
-            targets = args.targets.split(',').map(t => t.trim());
+            targets = args.targets.split(',').map((t: string) => t.trim());
           }
 
           const results: any[] = [];
@@ -559,7 +559,7 @@ export function createStructureTools(store: IStore, repoPath: string, budget: To
 
           for (const target of targets) {
             // Check if it's a file
-            const fileRes = await store.query<any[]>('SELECT id, path, language FROM file WHERE path = $path LIMIT 1', { path: target }) || [];
+            const fileRes = await store.query<any>('SELECT id, path, language FROM file WHERE path = $path LIMIT 1', { path: target }) || [];
             if (fileRes.length > 0) {
               const symbols = await store.query('SELECT id, name, kind, signature, docstring, isExported FROM symbol WHERE fileId = $fileId AND isExported = true', { fileId: fileRes[0].id }) || [];
               results.push({
@@ -572,7 +572,7 @@ export function createStructureTools(store: IStore, repoPath: string, budget: To
             }
 
             // Check if it's a module
-            const modRes = await store.query<any[]>('SELECT id, path FROM module WHERE path = $path LIMIT 1', { path: target }) || [];
+            const modRes = await store.query<any>('SELECT id, path FROM module WHERE path = $path LIMIT 1', { path: target }) || [];
             if (modRes.length > 0) {
               results.push({
                 type: 'module',
@@ -583,7 +583,7 @@ export function createStructureTools(store: IStore, repoPath: string, budget: To
             }
 
             // Check if it's a symbol
-            const symbolRes = await store.query<any[]>(`
+            const symbolRes = await store.query<any>(`
               SELECT id, name, kind, signature, docstring, 
                      (SELECT path FROM file WHERE id = $parent.fileId)[0].path as filePath 
               FROM symbol WHERE name = $name

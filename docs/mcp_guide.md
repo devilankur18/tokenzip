@@ -4,11 +4,11 @@ TokenZip exposes its knowledge graph to AI copilots via the **Model Context Prot
 
 ## Setup
 
-### 1. Build and Parse
-The MCP server requires a pre-built index.
+### 1. Build and Setup
+Initialize and index your codebase in one step.
 ```bash
-npm run build
-tokenzip parse
+npm run build # If running from source
+tokenzip setup
 ```
 
 ## 🔌 Multi-Editor Integration

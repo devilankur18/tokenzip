@@ -232,7 +232,7 @@ export class SurrealStore implements IStore {
   }
 
   async stats(): Promise<StoreStats> {
-    const res = await this.db.query<any[]>('INFO FOR DB;');
+    const res = await this.db.query<any>('INFO FOR DB;');
     const tables = res[0]?.tables || {};
     
     const nodeCount: Record<string, number> = {};

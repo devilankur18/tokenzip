@@ -15,9 +15,16 @@ import {
   Plus,
   BookOpen,
   Edit2,
-  Trash2
+  Trash2,
+  Layout,
+  Play,
+  BarChart3,
+  Cpu,
+  ArrowRight,
+  Code2
 } from 'lucide-react';
 import './App.css';
+import Playground from './components/Playground';
 
 interface Node {
   path?: string;
@@ -48,6 +55,12 @@ const App: React.FC = () => {
   const [repoInfo, setRepoInfo] = useState<{ name: string; path: string } | null>(null);
   const [isSearching, setIsSearching] = useState(false);
   const [isMaximized, setIsMaximized] = useState(false);
+  const [appMode, setAppMode] = useState<'graph' | 'playground'>(
+    (new URLSearchParams(window.location.search).get('view') as any) || 'graph'
+  );
+  const [selectedPlaygroundFile, setSelectedPlaygroundFile] = useState<string | null>(
+    new URLSearchParams(window.location.search).get('file')
+  );
   const [searchTypeFilter, setSearchTypeFilter] = useState<'all' | 'file' | 'symbol'>('all');
   const [filters, setFilters] = useState({
     nodes: { file: true, symbol: true, module: true },
@@ -93,6 +106,20 @@ const App: React.FC = () => {
 
     initDb();
   }, [dbPort]);
+
+  // Sync state to URL
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    params.set('view', appMode);
+    if (selectedPlaygroundFile) params.set('file', selectedPlaygroundFile);
+    else params.delete('file');
+    
+    // Preserve existing params like 'port'
+    if (dbPort && !params.has('port')) params.set('port', dbPort);
+    
+    const newUrl = `${window.location.pathname}?${params.toString()}`;
+    window.history.pushState({}, '', newUrl);
+  }, [appMode, selectedPlaygroundFile]);
 
   const fetchData = async (surreal: Surreal) => {
     try {
@@ -924,6 +951,22 @@ const App: React.FC = () => {
                   <Activity className="logo-icon" size={24} />
                   <div className="logo-text">TokenZip<span>Viz</span></div>
                 </div>
+                
+                <div className="mode-switcher">
+                  <button 
+                    className={`mode-btn ${appMode === 'graph' ? 'active' : ''}`}
+                    onClick={() => setAppMode('graph')}
+                  >
+                    <BarChart3 size={16} /> Map
+                  </button>
+                  <button 
+                    className={`mode-btn ${appMode === 'playground' ? 'active' : ''}`}
+                    onClick={() => setAppMode('playground')}
+                  >
+                    <Code2 size={16} /> Playground
+                  </button>
+                </div>
+
                 <div className="status-badge">
                   <div className="status-dot"></div>
                   {dbPort}
@@ -1378,6 +1421,17 @@ const App: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {appMode === 'playground' && (
+        <Playground 
+          db={db}
+          repoInfo={repoInfo}
+          initialFile={selectedPlaygroundFile}
+          onFileChange={setSelectedPlaygroundFile}
+          appMode={appMode}
+          setAppMode={setAppMode}
+        />
       )}
     </div>
   );

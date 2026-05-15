@@ -141,24 +141,13 @@ For a deep dive into how the "Memory Mesh" works, see our [Architecture Guide](d
 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/devilankur18/tokenzip/blob/main/notebooks/tokenzip_demo.ipynb)
 
-### 1. Install
+### 1. One-Step Setup
+Run this in your repository root to initialize and index the codebase:
 ```bash
-npm install -g tokenzip
+npx tokenzip setup
 ```
 
-### 2. Initialize & Parse
-```bash
-# Go to your repository
-cd /path/to/repo
-
-# Initialize metadata (.tokenzip/)
-tokenzip init
-
-# Build the knowledge graph
-tokenzip parse
-```
-
-### 3. Expose to AI
+### 2. Expose to AI
 Start the MCP server to let your AI agents use `smart_file_read`, `query_symbol`, and `find_references`.
 ```bash
 tokenzip serve
@@ -251,7 +240,7 @@ Check out the [Local LLM Guide](docs/local_llm_guide.md) for optimized settings.
 ## 🏗️ Project Status & Roadmap
 
 > [!IMPORTANT]
-> TokenZip v2 is currently **Experimental**. We are actively refining the edge resolution logic and adding more language support.
+> TokenZip is currently **Experimental**. We are actively refining the edge resolution logic and adding more language support.
 
 - [x] TypeScript / JavaScript support
 - [ ] Python Extractor

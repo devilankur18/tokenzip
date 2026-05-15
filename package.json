@@ -1,6 +1,6 @@
 {
   "name": "tokenzip",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "TokenZip — Reduce AI coding token costs by 90% with a persistent, queryable code intelligence graph that gives agents deep repo awareness across files, symbols, dependencies, and docs.",
   "license": "MIT",
   "author": "Ankur Agarwal",
@@ -21,7 +21,7 @@
   ],
   "type": "module",
   "bin": {
-    "tokenzip": "./dist/cli/index.js"
+    "tokenzip": "dist/cli/index.js"
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

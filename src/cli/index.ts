@@ -15,13 +15,14 @@ import { debugCommand } from './commands/debug.js';
 import { statsCommand } from './commands/stats.js';
 import { visualizeCommand } from './commands/visualize.js';
 import { cortexCommand } from './commands/cortex.js';
+import { setupCommand } from './commands/setup.js';
 
 const program = new Command();
 
 program
   .name('tokenzip')
   .description(
-    'TokenZip v2 — Transform any codebase into a queryable knowledge graph.\n' +
+    'TokenZip — Transform any codebase into a queryable knowledge graph.\n' +
     'Search symbols, trace call stacks, and expose your repo to AI copilots via MCP.\n\n' +
     'Quick start:\n' +
     '  tokenzip init      Initialize in current directory\n' +
@@ -30,13 +31,14 @@ program
     '  tokenzip mcp       Directly test MCP tools\n' +
     '  tokenzip serve     Start the MCP server for AI copilots'
   )
-  .version('2.0.0')
+  .version('0.1.0')
   .option('--cwd <dir>', 'Working directory', process.env.TOKENZIP_CWD || process.cwd())
   .hook('preAction', (thisCommand) => {
     const cwd = thisCommand.opts().cwd;
     console.error(`📂 Working Directory: ${path.resolve(cwd)}`);
   });
 
+program.addCommand(setupCommand);
 program.addCommand(initCommand);
 program.addCommand(parseCommand);
 program.addCommand(serveCommand);

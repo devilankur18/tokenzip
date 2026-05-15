@@ -104,10 +104,10 @@ export function createSymbolTools(store: IStore, repoPath: string, budget: Token
           
           // Find symbols that have ANY of these relations to our targets
           const [r1, r2, r3, r4] = await Promise.all([
-            store.query<any[]>('SELECT VALUE in FROM calls WHERE out IN $targets', { targets: targetIds }).then(r => r || []),
-            store.query<any[]>('SELECT VALUE in FROM inherits WHERE out IN $targets', { targets: targetIds }).then(r => r || []),
-            store.query<any[]>('SELECT VALUE in FROM implements WHERE out IN $targets', { targets: targetIds }).then(r => r || []),
-            store.query<any[]>('SELECT VALUE in FROM references WHERE out IN $targets', { targets: targetIds }).then(r => r || [])
+            store.query<any>('SELECT VALUE in FROM calls WHERE out IN $targets', { targets: targetIds }).then(r => r || []),
+            store.query<any>('SELECT VALUE in FROM inherits WHERE out IN $targets', { targets: targetIds }).then(r => r || []),
+            store.query<any>('SELECT VALUE in FROM implements WHERE out IN $targets', { targets: targetIds }).then(r => r || []),
+            store.query<any>('SELECT VALUE in FROM references WHERE out IN $targets', { targets: targetIds }).then(r => r || [])
           ]);
           
           const allIds = Array.from(new Set([...r1, ...r2, ...r3, ...r4]));

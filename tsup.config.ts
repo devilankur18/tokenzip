@@ -16,6 +16,8 @@ export default defineConfig({
     '@surrealdb/node',
     '@modelcontextprotocol/sdk',
     'commander',
-    'web-tree-sitter'
+    'web-tree-sitter',
+    'express',
+    'cors'
   ]
 });
