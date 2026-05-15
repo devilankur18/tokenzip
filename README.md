@@ -192,27 +192,35 @@ tokenzip report --output audit.md
 
 ---
 
-## 🤖 MCP Server (Agentic Context)
+### 2. Connect to Your AI Editor
 
-TokenZip is a first-class MCP server. It gives AI agents (like Claude Desktop) deep repository awareness.
+TokenZip works with all major AI editors. Here are the top 3:
 
-### 1. Start the server
-```bash
-tokenzip serve
-```
-
-### 2. Connect to Claude
-Add this to your `claude_desktop_config.json`:
+#### 🤖 Claude Desktop
+Add this to `claude_desktop_config.json`:
 ```json
 {
   "mcpServers": {
     "tokenzip": {
       "command": "tokenzip",
-      "args": ["serve", "--cwd", "/path/to/your/repo"]
+      "args": ["serve", "--cwd", "/absolute/path/to/your/repo"]
     }
   }
 }
 ```
+
+#### 🖱️ Cursor
+1. Go to **Settings** > **Features** > **MCP**.
+2. Add a new **Command** server: `tokenzip serve --cwd /path/to/repo`.
+
+#### 💻 VS Code + GitHub Copilot
+1. Run **"MCP: Open User Configuration"** from the Command Palette.
+2. Paste the JSON configuration (same as Claude Desktop).
+
+---
+
+### 📚 Full Integration Guide (Top 10 Editors)
+For detailed instructions on **Windsurf, Zed, Aider, Claude Code, Continue, and more**, see our [**MCP Multi-Editor Guide**](docs/mcp_guide.md).
 
 > [!TIP]
 > If you are running TokenZip from source, run `npm link` in the root of this project to make the `tokenzip` command available globally.

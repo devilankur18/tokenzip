@@ -11,19 +11,106 @@ npm run build
 tokenzip parse
 ```
 
-### 2. Configure Claude Desktop
-Add TokenZip to your Claude Desktop configuration (usually at `~/Library/Application Support/Claude/claude_desktop_config.json` on macOS):
+## 🔌 Multi-Editor Integration
 
+TokenZip follows the standard MCP specification. Below are instructions for the top 10 AI-native development environments.
+
+### 1. Claude Desktop (Reference Implementation)
+The primary way to use MCP.
+- **Config Path (macOS):** `~/Library/Application Support/Claude/claude_desktop_config.json`
+- **Config Path (Windows):** `%APPDATA%\Claude\claude_desktop_config.json`
+
+Add this to the `mcpServers` object:
 ```json
 {
   "mcpServers": {
     "tokenzip": {
       "command": "tokenzip",
-      "args": ["serve", "--cwd", "/your/project/path"]
+      "args": ["serve", "--cwd", "/absolute/path/to/your/repo"]
     }
   }
 }
 ```
+
+### 2. Cursor
+The most popular AI-native IDE.
+1. Open **Settings** (`Cmd+,` or `Ctrl+,`).
+2. Go to **Features** > **MCP**.
+3. Click **+ Add new global MCP Server**.
+4. **Name:** `tokenzip`
+5. **Type:** `command`
+6. **Command:** `tokenzip serve --cwd /absolute/path/to/your/repo`
+
+### 3. VS Code + GitHub Copilot (Native)
+GitHub Copilot now supports MCP natively.
+1. Open the **Command Palette** (`Cmd+Shift+P`).
+2. Run **"MCP: Open User Configuration"**.
+3. Add the `tokenzip` definition (same as Claude Desktop JSON above).
+4. Ensure you are in **Agent Mode** in the Chat panel.
+
+### 4. VS Code + Cline / Roo Code
+High-power autonomous agent extensions.
+1. Open the **Cline/Roo Code** panel.
+2. Click the **MCP Servers** icon (plug icon).
+3. Click **Edit Config** or add a new server.
+4. Paste the JSON configuration for `tokenzip`.
+
+### 5. Windsurf (Codeium)
+The "Flow-state" IDE from Codeium.
+1. Open **Settings**.
+2. Go to **Advanced** > **MCP Servers**.
+3. Click **Add Server** and provide the `tokenzip serve` command.
+
+### 6. Zed
+High-performance editor with built-in MCP support.
+1. Open your Zed settings (`Cmd+,`).
+2. Add a `mcp_servers` key to your `settings.json`:
+```json
+{
+  "mcp_servers": {
+    "tokenzip": {
+      "command": "tokenzip",
+      "args": ["serve", "--cwd", "/absolute/path/to/your/repo"]
+    }
+  }
+}
+```
+
+### 7. Aider (CLI)
+The most popular CLI-based AI coding assistant.
+Run Aider with the `--mcp` flag:
+```bash
+aider --mcp "tokenzip serve --cwd /absolute/path/to/your/repo"
+```
+
+### 8. Claude Code (CLI)
+Anthropic's official CLI tool.
+Claude Code automatically discovers MCP servers if they are configured in your Claude Desktop config, or you can add them via:
+```bash
+claude config add mcp.tokenzip.command "tokenzip serve --cwd /absolute/path/to/your/repo"
+```
+
+### 9. Continue (VS Code & JetBrains)
+Open-source autopilot for VS Code and JetBrains IDEs.
+1. Open `~/.continue/config.json`.
+2. Add to the `contextProviders` or `mcpServers` section:
+```json
+{
+  "mcpServers": [
+    {
+      "name": "tokenzip",
+      "command": "tokenzip",
+      "args": ["serve", "--cwd", "/absolute/path/to/your/repo"]
+    }
+  ]
+}
+```
+
+### 10. Sourcegraph Cody
+Enterprise AI that supports custom MCP servers.
+1. Open VS Code Settings.
+2. Search for `Cody: Custom MCP Servers`.
+3. Add a new entry with the `tokenzip serve` command.
 
 > [!TIP]
 > If the `tokenzip` command is not found, ensure you have linked the package locally using `npm link` or provide the absolute path to `node` and `dist/cli/index.js`.
@@ -142,7 +229,10 @@ TokenZip tools are optimized for agentic workflows where token budgets are tight
 - **Adaptive Skeletonization**: Structural tools automatically fold large directories (e.g., `... (+42 more files)`) while keeping all sub-directories visible, ensuring you never lose the "road map."
 - **Semantic Promotion**: Directories containing entry points (like `index.ts`) are promoted to **Modules** (📦) and their primary exports are showcased automatically in the tree view.
 
-## Troubleshooting
-- **No data returned**: Ensure you have run `tokenzip parse` first.
-- **EISDIR Error**: Ensure you aren't passing a directory path to a tool that expects a file (use `inspect_targets` for directories).
-- **Connection errors**: Check that the `--cwd` path in your config is correct and points to a directory with a `.tokenzip` folder.
+## 🌐 External Resources
+
+For more information on the Model Context Protocol and how to use it across various tools, check out these community resources:
+
+- **[Official MCP Documentation](https://modelcontextprotocol.io)**: The primary source for the protocol spec and client guides.
+- **[Awesome MCP](https://github.com/punkpeye/awesome-mcp)**: A curated list of MCP servers, clients, and tools.
+- **[MCP Servers Repository](https://github.com/modelcontextprotocol/servers)**: The official registry of reference server implementations.
