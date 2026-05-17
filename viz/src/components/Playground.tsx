@@ -81,6 +81,46 @@ const Playground: React.FC<PlaygroundProps> = ({ db, repoInfo, initialFile, onFi
     savings: number;
   } | null>(null);
   const [rawFileContent, setRawFileContent] = useState<string | null>(null);
+  
+  // Batch/Multi-file selections states
+  const [selectedFiles, setSelectedFiles] = useState<string[]>(initialFile ? [initialFile] : []);
+  const [batchRawContents, setBatchRawContents] = useState<Record<string, string>>({});
+  const [batchCompareData, setBatchCompareData] = useState<Record<string, {
+    rawTokens: number;
+    smartTokens: number;
+    rawLines: number;
+    smartLines: number;
+    savings: number;
+  }>>({});
+
+  useEffect(() => {
+    const fetchMultipleFileSymbols = async () => {
+      if (!db || selectedFiles.length === 0) {
+        setFileSymbols([]);
+        return;
+      }
+      try {
+        const fileRes = await db.query<any[]>('SELECT id FROM file WHERE path IN $paths', { paths: selectedFiles });
+        const fileIds = (fileRes[0] || []).map((f: any) => f.id);
+        
+        if (fileIds.length > 0) {
+          const symRes = await db.query<any[]>('SELECT name FROM symbol WHERE fileId IN $fileIds LIMIT 200', { fileIds });
+          const names = (symRes[0] || []).map((s: any) => s.name);
+          const uniqueNames = [...new Set(names as string[])];
+          setFileSymbols(uniqueNames);
+          if (uniqueNames.length > 0 && !readSymbol) {
+            setReadSymbol(uniqueNames[0]);
+          }
+        } else {
+          setFileSymbols([]);
+        }
+      } catch (err) {
+        console.error('Failed to fetch multiple files symbols:', err);
+      }
+    };
+    
+    fetchMultipleFileSymbols();
+  }, [selectedFiles, db]);
 
 
   useEffect(() => {
@@ -104,6 +144,9 @@ const Playground: React.FC<PlaygroundProps> = ({ db, repoInfo, initialFile, onFi
     setReadPath(path);
     setInsightTarget(path);
     
+    // Automatically select the file in the checkbox list too if not already selected
+    setSelectedFiles(prev => prev.includes(path) ? prev : [...prev, path]);
+    
     // Auto populate snapshot path with folder
     const folder = path.substring(0, path.lastIndexOf('/')) || 'src';
     setSnapshotPath(folder);
@@ -119,6 +162,14 @@ const Playground: React.FC<PlaygroundProps> = ({ db, repoInfo, initialFile, onFi
       runCodeInsight('recall', path);
     }
   };
+
+  useEffect(() => {
+    if (selectedFiles.length > 0) {
+      setReadPath(selectedFiles.join(', '));
+    } else {
+      setReadPath('');
+    }
+  }, [selectedFiles]);
 
   const fetchFilesAndSymbols = async () => {
     if (!db) return;
@@ -146,24 +197,37 @@ const Playground: React.FC<PlaygroundProps> = ({ db, repoInfo, initialFile, onFi
   const fetchFileSymbols = async (filePath: string) => {
     if (!db) return;
     try {
-      // Direct lookup by path to ensure SurrealDB StringRecordId or custom ID matches exactly
+      // First, get the correct file record id
       const fileRes = await db.query<any[]>('SELECT id FROM file WHERE path = $path LIMIT 1', { path: filePath });
-      const fileNode = fileRes[0]?.[0];
+      const resolvedId = fileRes[0]?.[0]?.id;
       
-      if (fileNode) {
-        const fileId = fileNode.id;
-        const symRes = await db.query<any[]>('SELECT name FROM symbol WHERE fileId = $fileId ORDER BY startLine ASC', { fileId });
+      if (resolvedId) {
+        const symRes = await db.query<any[]>('SELECT name FROM symbol WHERE fileId = $fileId', { fileId: resolvedId });
         const names = (symRes[0] || []).map((s: any) => s.name);
         setFileSymbols(names);
         if (names.length > 0) {
           setReadSymbol(names[0]);
           setTraceTarget(names[0]);
+        } else {
+          setFileSymbols([]);
         }
       } else {
-        setFileSymbols([]);
+        // Fallback string replacement
+        const symRes = await db.query<any[]>('SELECT name FROM symbol WHERE fileId = $fileId', { 
+          fileId: filePath.includes(':') ? filePath : `file:${filePath.replace(/\W/g, '_')}` 
+        });
+        const names = (symRes[0] || []).map((s: any) => s.name);
+        setFileSymbols(names);
+        if (names.length > 0) {
+          setReadSymbol(names[0]);
+          setTraceTarget(names[0]);
+        } else {
+          setFileSymbols([]);
+        }
       }
     } catch (err) {
       console.error('Failed to fetch file symbols:', err);
+      setFileSymbols([]);
     }
   };
 
@@ -221,7 +285,12 @@ const Playground: React.FC<PlaygroundProps> = ({ db, repoInfo, initialFile, onFi
 
     setCodeReadCompare(null); // Reset previous comparison data while loading
     setRawFileContent(null);
+    setBatchRawContents({});
+    setBatchCompareData({});
     
+    // Parse target paths
+    const targetPathsList = targetPath.split(',').map(p => p.trim()).filter(Boolean);
+
     // 1. Run the V2 Tool Call
     const res = await executeToolCall('code_read', {
       path: targetPath,
@@ -230,41 +299,132 @@ const Playground: React.FC<PlaygroundProps> = ({ db, repoInfo, initialFile, onFi
     });
 
     if (res && Array.isArray(res.content) && res.content[0]) {
-      const smartContent = res.content[0].text || '';
-      const smartTokens = smartContent.split(/\s+/).length;
-      const smartLines = smartContent.split('\n').length;
+      const smartText = res.content[0].text || '';
 
-      // 2. Fetch the Legacy raw file content for comparison
-      try {
-        const rawResponse = await fetch(`http://localhost:6001/api/tool`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            repoName: repoInfo?.name || 'openclaw',
-            toolName: 'file_read',
-            args: { path: targetPath }
-          })
-        });
-        
-        if (rawResponse.ok) {
-          const rawResult = await rawResponse.json();
-          const rawContent = (Array.isArray(rawResult.content) && rawResult.content[0]) ? rawResult.content[0].text : '';
-          setRawFileContent(rawContent);
+      // 2. Fetch the Legacy raw file content for all targets in batch parallel
+      const rawContents: Record<string, string> = {};
+      await Promise.all(targetPathsList.map(async (fPath) => {
+        try {
+          const rawResponse = await fetch(`http://localhost:6001/api/tool`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              repoName: repoInfo?.name || 'openclaw',
+              toolName: 'file_read',
+              args: { path: fPath }
+            })
+          });
           
-          const rawTokens = rawContent.split(/\s+/).length;
-          const rawLines = rawContent.split('\n').length;
-          const savings = Math.max(0, Math.min(99, Math.round((1 - (smartTokens / rawTokens)) * 100)));
+          if (rawResponse.ok) {
+            const rawResult = await rawResponse.json();
+            const rawContent = (Array.isArray(rawResult.content) && rawResult.content[0]) ? rawResult.content[0].text : '';
+            rawContents[fPath] = rawContent;
+          }
+        } catch (e) {
+          console.error(`Failed to load raw comparison read for ${fPath}:`, e);
+        }
+      }));
+
+      setBatchRawContents(rawContents);
+
+      // 3. Process the response comparison
+      try {
+        const parsed = JSON.parse(smartText);
+        
+        if (parsed && typeof parsed === 'object' && parsed.is_batch && Array.isArray(parsed.files)) {
+          // Process batch response
+          const comps: Record<string, any> = {};
+          let totalRawTokens = 0;
+          let totalSmartTokens = 0;
+          let totalRawLines = 0;
+          let totalSmartLines = 0;
+
+          for (const fileItem of parsed.files) {
+            const fPath = fileItem.filePath;
+            const sContent = fileItem.content || '';
+            const rContent = rawContents[fPath] || '';
+
+            const sTokens = sContent.split(/\s+/).length;
+            const sLines = sContent.split('\n').length;
+            const rTokens = rContent.split(/\s+/).length;
+            const rLines = rContent.split('\n').length;
+            const fileSavings = Math.max(0, Math.min(99, Math.round((1 - (sTokens / rTokens)) * 100)));
+
+            comps[fPath] = {
+              rawTokens: rTokens,
+              smartTokens: sTokens,
+              rawLines: rLines,
+              smartLines: sLines,
+              savings: isNaN(fileSavings) ? 0 : fileSavings
+            };
+
+            totalRawTokens += rTokens;
+            totalSmartTokens += sTokens;
+            totalRawLines += rLines;
+            totalSmartLines += sLines;
+          }
+
+          setBatchCompareData(comps);
+          const overallSavings = Math.max(0, Math.min(99, Math.round((1 - (totalSmartTokens / totalRawTokens)) * 100)));
+          setCodeReadCompare({
+            rawTokens: totalRawTokens,
+            smartTokens: totalSmartTokens,
+            rawLines: totalRawLines,
+            smartLines: totalSmartLines,
+            savings: isNaN(overallSavings) ? 0 : overallSavings
+          });
+        } else {
+          // Process single file response
+          const smartContent = parsed.content || smartText;
+          const smartTokens = smartContent.split(/\s+/).length;
+          const smartLines = smartContent.split('\n').length;
+
+          const singlePath = targetPathsList[0] || targetPath;
+          const rContent = rawContents[singlePath] || '';
+          setRawFileContent(rContent);
+
+          const rTokens = rContent.split(/\s+/).length;
+          const rLines = rContent.split('\n').length;
+          const savings = Math.max(0, Math.min(99, Math.round((1 - (smartTokens / rTokens)) * 100)));
 
           setCodeReadCompare({
-            rawTokens,
-            smartTokens,
-            rawLines,
-            smartLines,
+            rawTokens: rTokens,
+            smartTokens: smartTokens,
+            rawLines: rLines,
+            smartLines: smartLines,
             savings: isNaN(savings) ? 0 : savings
+          });
+
+          setBatchCompareData({
+            [singlePath]: {
+              rawTokens: rTokens,
+              smartTokens: smartTokens,
+              rawLines: rLines,
+              smartLines: smartLines,
+              savings: isNaN(savings) ? 0 : savings
+            }
           });
         }
       } catch (e) {
-        console.error('Failed to load raw comparison read:', e);
+        // Fallback for non-JSON responses
+        const smartTokens = smartText.split(/\s+/).length;
+        const smartLines = smartText.split('\n').length;
+
+        const singlePath = targetPathsList[0] || targetPath;
+        const rContent = rawContents[singlePath] || '';
+        setRawFileContent(rContent);
+
+        const rTokens = rContent.split(/\s+/).length;
+        const rLines = rContent.split('\n').length;
+        const savings = Math.max(0, Math.min(99, Math.round((1 - (smartTokens / rTokens)) * 100)));
+
+        setCodeReadCompare({
+          rawTokens: rTokens,
+          smartTokens: smartTokens,
+          rawLines: rLines,
+          smartLines: smartLines,
+          savings: isNaN(savings) ? 0 : savings
+        });
       }
     }
   };
@@ -672,34 +832,65 @@ const Playground: React.FC<PlaygroundProps> = ({ db, repoInfo, initialFile, onFi
         
         {/* Left Explorer Sidebar */}
         <div className="explorer-panel" style={{ width: '280px', background: '#0c0c10', borderRight: '1px solid rgba(255,255,255,0.06)', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
-          <div className="explorer-header" style={{ padding: '16px', borderBottom: '1px solid rgba(255,255,255,0.06)', fontSize: '0.75rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '1px', color: '#94a3b8', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span>Source Code Index</span>
-            <RefreshCw size={12} style={{ cursor: 'pointer', color: '#6366f1' }} onClick={fetchFilesAndSymbols} />
+          <div className="explorer-header" style={{ padding: '16px', borderBottom: '1px solid rgba(255,255,255,0.06)', fontSize: '0.75rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '1px', color: '#94a3b8', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+              <span>Source Code Index</span>
+              <RefreshCw size={12} style={{ cursor: 'pointer', color: '#6366f1' }} onClick={fetchFilesAndSymbols} />
+            </div>
+            <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+              <button 
+                onClick={() => setSelectedFiles(playgroundFiles.map(f => f.path))}
+                style={{ background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.2)', color: '#818cf8', padding: '3px 8px', borderRadius: '4px', fontSize: '0.62rem', cursor: 'pointer', fontWeight: 700, outline: 'none' }}
+              >
+                Select All
+              </button>
+              <button 
+                onClick={() => setSelectedFiles([])}
+                style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.08)', color: '#94a3b8', padding: '3px 8px', borderRadius: '4px', fontSize: '0.62rem', cursor: 'pointer', fontWeight: 700, outline: 'none' }}
+              >
+                Clear All
+              </button>
+            </div>
           </div>
           <div className="tree-view" style={{ flex: 1, overflowY: 'auto', padding: '10px' }}>
-            {playgroundFiles.map(file => (
-              <div 
-                key={file.path} 
-                className={`tree-node ${selectedFile === file.path ? 'active' : ''}`}
-                onClick={() => handleFileSelect(file.path)}
-                style={{ 
-                  padding: '7px 10px', 
-                  borderRadius: '6px', 
-                  cursor: 'pointer', 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  gap: '8px', 
-                  fontSize: '0.8rem', 
-                  color: selectedFile === file.path ? '#818cf8' : '#94a3b8', 
-                  background: selectedFile === file.path ? 'rgba(99,102,241,0.08)' : 'transparent',
-                  marginBottom: '2px',
-                  transition: 'all 0.15s ease' 
-                }}
-              >
-                <FileCode size={14} style={{ flexShrink: 0 }} />
-                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.path}</span>
-              </div>
-            ))}
+            {playgroundFiles.map(file => {
+              const isChecked = selectedFiles.includes(file.path);
+              return (
+                <div 
+                  key={file.path} 
+                  className={`tree-node ${selectedFile === file.path ? 'active' : ''}`}
+                  onClick={() => handleFileSelect(file.path)}
+                  style={{ 
+                    padding: '7px 10px', 
+                    borderRadius: '6px', 
+                    cursor: 'pointer', 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '8px', 
+                    fontSize: '0.8rem', 
+                    color: selectedFile === file.path ? '#818cf8' : '#94a3b8', 
+                    background: selectedFile === file.path ? 'rgba(99,102,241,0.08)' : 'transparent',
+                    marginBottom: '2px',
+                    transition: 'all 0.15s ease' 
+                  }}
+                >
+                  <input 
+                    type="checkbox"
+                    checked={isChecked}
+                    onChange={(e) => {
+                      e.stopPropagation();
+                      setSelectedFiles(prev => 
+                        isChecked ? prev.filter(p => p !== file.path) : [...prev, file.path]
+                      );
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                    style={{ cursor: 'pointer', accentColor: '#6366f1' }}
+                  />
+                  <FileCode size={14} style={{ flexShrink: 0 }} />
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{file.path}</span>
+                </div>
+              );
+            })}
           </div>
         </div>
 
@@ -1424,7 +1615,7 @@ const Playground: React.FC<PlaygroundProps> = ({ db, repoInfo, initialFile, onFi
                         </div>
                       ) : activeTool === 'code_read' ? (
                         /* Dynamic Side-by-Side ROI Token Comparison Workspace */
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', width: '100%' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', width: '100%' }}>
                           
                           {/* Top ROI Header Banner */}
                           {codeReadCompare && (
@@ -1453,42 +1644,98 @@ const Playground: React.FC<PlaygroundProps> = ({ db, repoInfo, initialFile, onFi
                             </div>
                           )}
 
-                          {/* Side-by-Side Code Viewer */}
-                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', minHeight: '400px', width: '100%' }}>
-                            
-                            {/* Left Box: V2 Optimized skeletal content */}
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', minWidth: 0 }}>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 8px' }}>
-                                <span style={{ fontSize: '0.75rem', color: '#34d399', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '6px', letterSpacing: '0.5px' }}>
-                                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#34d399' }}></span>
-                                  V2 SMART READ (MODE: {readMode.toUpperCase()})
-                                </span>
-                                <span style={{ fontSize: '0.7rem', color: '#34d399', background: 'rgba(52,211,153,0.1)', padding: '2px 8px', borderRadius: '6px', fontWeight: 700, border: '1px solid rgba(52,211,153,0.15)' }}>
-                                  {codeReadCompare ? codeReadCompare.smartTokens.toLocaleString() : '...'} tokens
-                                </span>
-                              </div>
-                              <pre className="code-box" style={{ flex: 1, margin: 0, padding: '16px', overflow: 'auto', fontSize: '0.75rem', fontFamily: '"Fira Code", monospace', background: '#050507', color: '#cbd5e1', lineHeight: '1.6', borderRadius: '12px', border: '1px solid rgba(52,211,153,0.2)' }}>
-                                {getCleanResultText()}
-                              </pre>
-                            </div>
+                          {/* Code View Deck - Check if it's a batch or single file */}
+                          {(() => {
+                            try {
+                              const parsed = JSON.parse(toolResult?.content?.[0]?.text || '{}');
+                              if (parsed && typeof parsed === 'object' && parsed.is_batch && Array.isArray(parsed.files)) {
+                                return (
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', width: '100%' }}>
+                                    {parsed.files.map((fileItem: any) => {
+                                      const fPath = fileItem.filePath;
+                                      const fCompare = batchCompareData[fPath];
+                                      const rContent = batchRawContents[fPath] || '';
+                                      
+                                      return (
+                                        <div key={fPath} style={{ display: 'flex', flexDirection: 'column', gap: '12px', background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.04)', borderRadius: '16px', padding: '20px' }}>
+                                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.04)', paddingBottom: '10px', marginBottom: '8px' }}>
+                                            <span style={{ fontSize: '0.82rem', color: '#818cf8', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '6px' }}>📂 File: {fPath}</span>
+                                            {fCompare && (
+                                              <span style={{ fontSize: '0.72rem', color: '#34d399', fontWeight: 700, background: 'rgba(52,211,153,0.08)', padding: '4px 10px', borderRadius: '8px', border: '1px solid rgba(52,211,153,0.15)' }}>
+                                                ⚡️ {fCompare.savings}% compressed ({fCompare.smartTokens.toLocaleString()} vs {fCompare.rawTokens.toLocaleString()} tokens)
+                                              </span>
+                                            )}
+                                          </div>
 
-                            {/* Right Box: Legacy raw full content */}
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', minWidth: 0 }}>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 8px' }}>
-                                <span style={{ fontSize: '0.75rem', color: '#f87171', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '6px', letterSpacing: '0.5px' }}>
-                                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#f87171' }}></span>
-                                  V1 LEGACY FULL FILE READ
-                                </span>
-                                <span style={{ fontSize: '0.7rem', color: '#f87171', background: 'rgba(239,68,68,0.1)', padding: '2px 8px', borderRadius: '6px', fontWeight: 700, border: '1px solid rgba(239,68,68,0.15)' }}>
-                                  {codeReadCompare ? codeReadCompare.rawTokens.toLocaleString() : '...'} tokens
-                                </span>
-                              </div>
-                              <pre className="code-box" style={{ flex: 1, margin: 0, padding: '16px', overflow: 'auto', fontSize: '0.75rem', fontFamily: '"Fira Code", monospace', background: '#050507', color: '#94a3b8', lineHeight: '1.6', borderRadius: '12px', border: '1px solid rgba(239,68,68,0.15)' }}>
-                                {rawFileContent || 'Loading raw file context...'}
-                              </pre>
-                            </div>
+                                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', minHeight: '350px', width: '100%' }}>
+                                            {/* Left: V2 Smart */}
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', minWidth: 0 }}>
+                                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '2px 4px' }}>
+                                                <span style={{ fontSize: '0.7rem', color: '#34d399', fontWeight: 800 }}>V2 SMART READ (MODE: {readMode.toUpperCase()})</span>
+                                                <span style={{ fontSize: '0.65rem', color: '#94a3b8' }}>{fCompare?.smartTokens.toLocaleString() || '...'} tokens</span>
+                                              </div>
+                                              <pre className="code-box" style={{ flex: 1, margin: 0, padding: '12px', overflow: 'auto', fontSize: '0.7rem', fontFamily: '"Fira Code", monospace', background: '#050507', color: '#cbd5e1', lineHeight: '1.5', borderRadius: '10px', border: '1px solid rgba(52,211,153,0.15)' }}>
+                                                {fileItem.content}
+                                              </pre>
+                                            </div>
 
-                          </div>
+                                            {/* Right: V1 Raw */}
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', minWidth: 0 }}>
+                                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '2px 4px' }}>
+                                                <span style={{ fontSize: '0.7rem', color: '#f87171', fontWeight: 800 }}>V1 RAW READ</span>
+                                                <span style={{ fontSize: '0.65rem', color: '#94a3b8' }}>{fCompare?.rawTokens.toLocaleString() || '...'} tokens</span>
+                                              </div>
+                                              <pre className="code-box" style={{ flex: 1, margin: 0, padding: '12px', overflow: 'auto', fontSize: '0.7rem', fontFamily: '"Fira Code", monospace', background: '#050507', color: '#94a3b8', lineHeight: '1.5', borderRadius: '10px', border: '1px solid rgba(239,68,68,0.1)' }}>
+                                                {rContent || 'Loading raw file context...'}
+                                              </pre>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                );
+                              }
+                            } catch (e) {}
+
+                            // Fallback single file comparison
+                            return (
+                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', minHeight: '400px', width: '100%' }}>
+                                {/* Left Box: V2 Optimized skeletal content */}
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', minWidth: 0 }}>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 8px' }}>
+                                    <span style={{ fontSize: '0.75rem', color: '#34d399', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '6px', letterSpacing: '0.5px' }}>
+                                      <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#34d399' }}></span>
+                                      V2 SMART READ (MODE: {readMode.toUpperCase()})
+                                    </span>
+                                    <span style={{ fontSize: '0.7rem', color: '#34d399', background: 'rgba(52,211,153,0.1)', padding: '2px 8px', borderRadius: '6px', fontWeight: 700, border: '1px solid rgba(52,211,153,0.15)' }}>
+                                      {codeReadCompare ? codeReadCompare.smartTokens.toLocaleString() : '...'} tokens
+                                    </span>
+                                  </div>
+                                  <pre className="code-box" style={{ flex: 1, margin: 0, padding: '16px', overflow: 'auto', fontSize: '0.75rem', fontFamily: '"Fira Code", monospace', background: '#050507', color: '#cbd5e1', lineHeight: '1.6', borderRadius: '12px', border: '1px solid rgba(52,211,153,0.2)' }}>
+                                    {getCleanResultText()}
+                                  </pre>
+                                </div>
+
+                                {/* Right Box: Legacy raw full content */}
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', minWidth: 0 }}>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 8px' }}>
+                                    <span style={{ fontSize: '0.75rem', color: '#f87171', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '6px', letterSpacing: '0.5px' }}>
+                                      <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#f87171' }}></span>
+                                      V1 LEGACY FULL FILE READ
+                                    </span>
+                                    <span style={{ fontSize: '0.7rem', color: '#f87171', background: 'rgba(239,68,68,0.1)', padding: '2px 8px', borderRadius: '6px', fontWeight: 700, border: '1px solid rgba(239,68,68,0.15)' }}>
+                                      {codeReadCompare ? codeReadCompare.rawTokens.toLocaleString() : '...'} tokens
+                                    </span>
+                                  </div>
+                                  <pre className="code-box" style={{ flex: 1, margin: 0, padding: '16px', overflow: 'auto', fontSize: '0.75rem', fontFamily: '"Fira Code", monospace', background: '#050507', color: '#94a3b8', lineHeight: '1.6', borderRadius: '12px', border: '1px solid rgba(239,68,68,0.15)' }}>
+                                    {rawFileContent || 'Loading raw file context...'}
+                                  </pre>
+                                </div>
+                              </div>
+                            );
+                          })()}
+
                         </div>
                       ) : (
                         /* Standard JSON/Code output render */

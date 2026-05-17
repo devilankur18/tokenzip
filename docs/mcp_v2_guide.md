@@ -82,6 +82,24 @@ By supplying semantic skeletal maps, AST-aware lookups, call flow tracers, and a
 }
 ```
 
+#### ⚡️ Batch File & Batch Symbol Lookups (V2 Enhanced)
+V2 dynamically processes multiple files or symbol selections in a single call, optimizing communication roundtrips:
+* **Batch Files**: Pass a comma-separated list of paths or a `paths` array:
+  ```json
+  {
+    "path": "src/index.ts, src/mcp/registry.ts",
+    "mode": "skeleton"
+  }
+  ```
+* **Batch Symbol Implementations**: Pass comma-separated symbol names or a `symbols` array:
+  ```json
+  {
+    "path": "src/mcp/registry.ts",
+    "mode": "implementation",
+    "symbol": "registerTools, getActiveBudget"
+  }
+  ```
+
 #### 📥 Real-World Output
 ```typescript
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";

@@ -58,4 +58,33 @@ describe('code_read (v2)', () => {
       expect(result.content).toBeDefined();
     });
   }
+
+  it('should support batch reading multiple files in code_read', async () => {
+    const result = await tool.handler({ path: 'app.ts, server.ts' });
+    const data = JSON.parse(result.content[0].text);
+    expect(data.is_batch).toBe(true);
+    expect(data.files).toBeDefined();
+    expect(data.files.length).toBe(2);
+    expect(data.files[0].filePath).toBe('app.ts');
+    expect(data.files[1].filePath).toBe('server.ts');
+  });
+
+  it('should support batch reading multiple files with paths array in code_read', async () => {
+    const result = await tool.handler({ path: 'ignored.ts', paths: ['index.ts', 'server.ts'] });
+    const data = JSON.parse(result.content[0].text);
+    expect(data.is_batch).toBe(true);
+    expect(data.files.length).toBe(2);
+    expect(data.files[0].filePath).toBe('index.ts');
+    expect(data.files[1].filePath).toBe('server.ts');
+  });
+
+  it('should support batch reading implementations of multiple symbols', async () => {
+    const { executeStrategy } = await import('../../smart-file-read.js');
+    (executeStrategy as any).mockResolvedValue({ content: 'mock symbol impl', mode_used: 'implementation_of', symbol_count: 1 });
+    
+    const result = await tool.handler({ path: 'app.ts', mode: 'implementation', symbol: 'funcA, funcB' });
+    const data = JSON.parse(result.content[0].text);
+    expect(data.content).toContain('Symbol: funcA');
+    expect(data.content).toContain('Symbol: funcB');
+  });
 });
