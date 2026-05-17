@@ -40,7 +40,7 @@ const Playground: React.FC<PlaygroundProps> = ({ db, repoInfo, initialFile, onFi
 
   // 2. Tool 2: code_read Params
   const [readPath, setReadPath] = useState('');
-  const [readMode, setReadMode] = useState<'skeleton' | 'interface' | 'implementation'>('skeleton');
+  const [readMode, setReadMode] = useState<'skeleton' | 'interface' | 'implementation' | 'full'>('skeleton');
   const [readSymbol, setReadSymbol] = useState('');
 
   // 3. Tool 3: code_search Params
@@ -1057,7 +1057,7 @@ const Playground: React.FC<PlaygroundProps> = ({ db, repoInfo, initialFile, onFi
                       style={{ background: '#121218', border: '1px solid rgba(255,255,255,0.1)', color: 'white', padding: '8px 12px', borderRadius: '8px', fontSize: '0.8rem', outline: 'none' }}
                     />
                   </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                     <label style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: 600 }}>Reading Mode:</label>
                     <select 
                       value={readMode} 
@@ -1067,6 +1067,7 @@ const Playground: React.FC<PlaygroundProps> = ({ db, repoInfo, initialFile, onFi
                       <option value="skeleton">Skeleton (Token Optimized)</option>
                       <option value="interface">Interface Only (API Specs)</option>
                       <option value="implementation">Implementation Of Symbol</option>
+                      <option value="full">Full File (Uncollapsed Logic)</option>
                     </select>
                   </div>
                   {readMode === 'implementation' && (

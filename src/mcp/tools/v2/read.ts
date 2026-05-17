@@ -20,9 +20,9 @@ export function createReadTool(store: IStore, repoPath: string, budget: TokenBud
         },
         mode: { 
           type: 'string', 
-          enum: ['skeleton', 'interface', 'implementation'], 
+          enum: ['skeleton', 'interface', 'implementation', 'full'], 
           default: 'skeleton',
-          description: 'Reading mode. Skeleton hides bodies to save tokens.'
+          description: 'Reading mode. skeleton hides bodies, interface extracts public APIs, implementation reads specific symbols, full reads the complete file uncollapsed.'
         },
         symbol: { type: 'string', description: 'Symbol name or comma-separated symbol names to read implementations of.' },
         symbols: { 
@@ -99,13 +99,23 @@ export function createReadTool(store: IStore, repoPath: string, budget: TokenBud
           const fileNode = fileRes[0];
           const fileId = fileNode.id;
 
+          const isFullFile = mode === 'full' || (mode === 'implementation' && symbolList.length === 0);
           const strategyMode = mode === 'implementation' ? 'implementation_of' : 
                               mode === 'interface' ? 'interface_only' : 'skeleton';
 
           let fileContent = '';
           let fileSymbolCount = 0;
 
-          if (strategyMode === 'implementation_of') {
+          if (isFullFile) {
+            // Full uncollapsed reading mode!
+            try {
+              fileContent = fs.readFileSync(absPath, 'utf8');
+              const countRes = await store.query<any>('SELECT count() FROM symbol WHERE fileId = $fileId', { fileId });
+              fileSymbolCount = countRes[0]?.count || 0;
+            } catch (e: any) {
+              fileContent = `Error reading full file: ${e.message}`;
+            }
+          } else if (strategyMode === 'implementation_of') {
             if (symbolList.length > 1) {
               // Batch read multiple symbols inside this file!
               const symbolContents = [];
@@ -173,6 +183,33 @@ export function createReadTool(store: IStore, repoPath: string, budget: TokenBud
         }
 
         // Return a single file response or a batch response
+        const isFullFileMode = mode === 'full' || (mode === 'implementation' && symbolList.length === 0);
+
+        if (isFullFileMode) {
+          if (filesResults.length === 1) {
+            // Full file mode output is returned EXACTLY as same raw file_read: no wrappers, no compression!
+            return {
+              content: [{ type: 'text', text: filesResults[0].content }]
+            };
+          } else {
+            // Batch full file mode returns raw file contents in simple structural JSON representation, with NO truncation!
+            return {
+              content: [{
+                type: 'text',
+                text: JSON.stringify({
+                  is_batch: true,
+                  files: filesResults.map(f => ({
+                    filePath: f.filePath,
+                    content: f.content
+                  })),
+                  mode_used: 'full',
+                  symbol_count: totalSymbolsCount
+                }, null, 2)
+              }]
+            };
+          }
+        }
+
         let response: any;
         if (filesResults.length === 1) {
           const singleFile = filesResults[0];

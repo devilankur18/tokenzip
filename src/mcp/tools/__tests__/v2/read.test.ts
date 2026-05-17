@@ -2,6 +2,16 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { createReadTool } from '../../v2/read.js';
 import { TokenBudgetManager } from '../../../token-budget.js';
 
+// Mock fs module for tests
+vi.mock('fs', () => ({
+  default: {
+    readFileSync: vi.fn().mockReturnValue('entire full file content'),
+    existsSync: vi.fn().mockReturnValue(true)
+  },
+  readFileSync: vi.fn().mockReturnValue('entire full file content'),
+  existsSync: vi.fn().mockReturnValue(true)
+}));
+
 // Mock the smart-file-read strategy
 vi.mock('../../smart-file-read.js', () => ({
   executeStrategy: vi.fn().mockResolvedValue({
@@ -86,5 +96,19 @@ describe('code_read (v2)', () => {
     const data = JSON.parse(result.content[0].text);
     expect(data.content).toContain('Symbol: funcA');
     expect(data.content).toContain('Symbol: funcB');
+  });
+
+  it('should support full uncollapsed reading mode', async () => {
+    mockStore.query.mockResolvedValueOnce([{ id: 'file:1', parse_status: 'parsed' }]); // File check
+
+    const result = await tool.handler({ path: 'app.ts', mode: 'full' });
+    expect(result.content[0].text).toBe('entire full file content');
+  });
+
+  it('should fallback to full uncollapsed read if mode is implementation but no symbols specified', async () => {
+    mockStore.query.mockResolvedValueOnce([{ id: 'file:1', parse_status: 'parsed' }]); // File check
+
+    const result = await tool.handler({ path: 'app.ts', mode: 'implementation' });
+    expect(result.content[0].text).toBe('entire full file content'); // Matches mock
   });
 });
