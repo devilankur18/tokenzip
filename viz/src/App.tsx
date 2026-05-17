@@ -16,17 +16,16 @@ import {
   BookOpen,
   Edit2,
   Trash2,
-  Layout,
-  Play,
   BarChart3,
-  Cpu,
-  ArrowRight,
   Code2
 } from 'lucide-react';
 import './App.css';
 import Playground from './components/Playground';
 
 interface Node {
+  id: string;
+  type: string;
+  name: string;
   path?: string;
   signature?: string;
   docs?: string;
@@ -37,6 +36,7 @@ interface Node {
   outDegree?: number;
   hasMemory?: boolean;
 }
+
 
 interface Edge {
   id: string;
