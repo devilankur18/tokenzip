@@ -60,25 +60,48 @@ export class TokenBudgetManager {
     // We limit iterations to avoid infinite loops or excessive processing
     while (this.estimate(JSON.stringify(obj)) > budget && iterations < 10) {
       const arrays = getArrays(obj).filter(a => a.length > 1);
-      if (arrays.length === 0) break;
       
-      // Sort by length descending to target the largest arrays first
-      arrays.sort((a, b) => b.length - a.length);
+      // Also look for long strings
+      const getStrings = (o: any, path: string = ''): { path: string, length: number }[] => {
+        let res: { path: string, length: number }[] = [];
+        if (typeof o === 'string' && o.length > 100) {
+          res.push({ path, length: o.length });
+        } else if (typeof o === 'object' && o !== null && !Array.isArray(o)) {
+          for (const key of Object.keys(o)) {
+            const subPath = path ? `${path}.${key}` : key;
+            res.push(...getStrings(o[key], subPath));
+          }
+        }
+        return res;
+      };
       
-      const target = arrays[0];
-      // Reduce the largest array by 40% each iteration
-      const newLen = Math.max(1, Math.floor(target.length * 0.6));
+      const strings = getStrings(obj);
       
-      // Navigate to the target array and slice it
+      if (arrays.length === 0 && strings.length === 0) break;
+      
+      // Target the largest entity (array or string)
+      const all = [
+        ...arrays.map(a => ({ ...a, type: 'array' })),
+        ...strings.map(s => ({ ...s, type: 'string' }))
+      ].sort((a, b) => b.length - a.length);
+      
+      const target = all[0];
+      const newLen = Math.max(20, Math.floor(target.length * 0.6));
+      
       const parts = target.path.split('.');
       let current = obj;
       for (let i = 0; i < parts.length - 1; i++) {
         current = current[parts[i]];
       }
       const lastKey = parts[parts.length - 1];
-      current[lastKey] = current[lastKey].slice(0, newLen);
       
-      obj._truncation_note = `Pruned large arrays to fit token budget (depth: ${iterations + 1})`;
+      if (target.type === 'array') {
+        current[lastKey] = current[lastKey].slice(0, newLen);
+      } else {
+        current[lastKey] = current[lastKey].slice(0, newLen) + '\n... [TRUNCATED]';
+      }
+      
+      obj._truncation_note = `Pruned large entities to fit token budget (depth: ${iterations + 1})`;
       iterations++;
     }
 

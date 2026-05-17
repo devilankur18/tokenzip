@@ -7,53 +7,25 @@
 
 ---
 
-## Name: **Cortex**
+## Name: **Cortex (Recall Intelligence)**
 
-"Context Memory" was descriptive but verbose. **Cortex** is shorter, more memorable,
-and the `cortex_*` prefix makes tools instantly identifiable in any MCP tool list.
-
----
-
-## Key Design Decisions (What Changed & Why)
-
-### Adopted from External Review
-
-| Insight | What changed | Why |
-|---|---|---|
-| **`cortex_traverse`** | Added a 6th tool for reading-plan generation | `recall` provides *knowledge*; `traverse` provides a *reading plan*. Without it, agents still blindly explore files. |
-| **`summary` + `details` split** | Replaced single `content` field | Auto-recall shows only `summary` (~1-3 sentences). Explicit `recall` shows `details` too. Halves auto-recall token cost. |
-| **`target_hash` staleness** | Added content_hash snapshot on annotation creation | On recall, if file hash changed → `[⚠️ STALE]` flag. Time-based TTL would kill timeless architecture notes. |
-| **Leaner categories** | 13 → 6 categories + tags for granularity | LLMs hallucinate enums. 6 clear types with tag-based sub-filtering is more robust. |
-
-### Kept from Our Design (Validated)
-
-| Feature | Why it stays |
-|---|---|
-| **Edge-based scoping** (`scoped_to` edges) | One annotation → many targets. No duplication. Graph-native. |
-| **`supersedes` versioning** | Linked-list of thought evolution. Audit trail for knowledge changes. |
-| **`max_tokens` budget in recall** | Context-window aware. Priority-ordered trimming. |
-| **Auto-recall injection** | Guarantees 100% adoption vs ~60% when relying on LLM to call recall. |
-| **Priority-based retrieval** | `critical` → `important` → `normal` → `low`. Drop lowest first. |
-
-### Anti-Patterns Avoided
-
-| Anti-pattern | Resolution |
-|---|---|
-| **`manage_annotations` action selector** | Split into dedicated verbs: `cortex_remove` + field updates via `cortex_save` with `supersedes`. LLMs fail ~30% of the time with action-branching tools. |
-| **Session-ID filtering in recall** | Removed. Agents lazily filter to "yesterday's" notes and miss older high-value ones. Sort by access_count + confidence instead. |
+"Context Memory" was descriptive but verbose. **Cortex** is the persistent knowledge layer that powers Recall Kit. In V2, the specialized `cortex_*` tools have been consolidated into the unified **`code_insight`** tool for a cleaner, more actionable agent interface.
 
 ---
 
-## Tool Suite (6 Tools)
+## Tool Suite (Recall Kit V2 Consolidation)
 
-| Tool | Verb | Purpose |
+In Recall Kit V2, all persistent memory actions are handled via **`code_insight`**:
+
+| Action | Equivalent V1 Tool | Purpose |
 |---|---|---|
-| `cortex_save` | Save | Persist structured knowledge scoped to graph nodes |
-| `cortex_recall` | Recall | Retrieve relevant notes with scope inheritance + budget |
-| `cortex_traverse` | Plan | Get optimized reading plan for a module/feature area |
-| `cortex_search` | Search | Cross-cutting search by keyword/tag/type across all notes |
-| `cortex_remove` | Remove | Delete/archive a note with reason (feeds staleness learning) |
-| `cortex_suggest` | Suggest | Log structured improvement request with KPI impact |
+| `recall` | `cortex_recall` | Retrieve relevant notes with scope inheritance + budget |
+| `save` | `cortex_save` | Persist structured knowledge scoped to graph nodes |
+| `search` | `cortex_search` | Cross-cutting search by keyword/tag/type across all notes |
+| `forget` | `cortex_remove` | Archive a note (staleness management) |
+| `traverse` | `cortex_traverse` | Planned action: Optimized reading plan generation |
+
+---
 
 ---
 

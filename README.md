@@ -1,29 +1,24 @@
 <div align="center">
 
-# 🗜️ TokenZip
+# 🧠 Recall Kit (formerly TokenZip)
 
-**The Semantic Compression Layer for AI Agents.**  
-Transform any codebase into a queryable knowledge graph and stop wasting tokens on implementation details.
+**Total Recall for AI Agents.**  
+Transform any codebase into an incremental knowledge graph. Save tokens, build memory, and ship faster.
 
-![TokenZip Hero Comparison](assets/hero_comparison.png)
+![Recall Kit Hero Comparison](assets/hero_comparison.png)
 
 [![npm version](https://img.shields.io/npm/v/tokenzip.svg)](https://www.npmjs.com/package/tokenzip)
 [![Node.js >= 18](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg)](https://nodejs.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Build Status](https://img.shields.io/github/actions/workflow/status/devilankur18/tokenzip/ci.yml?branch=main)](https://github.com/devilankur18/tokenzip/actions)
-
 </div>
 
 ---
 
-## 🔍 What is TokenZip? (AI-Native Code Intelligence)
+## 🧠 What is Recall Kit? (Intent-Driven Code Intelligence)
 
-TokenZip is a **Graph-Based Code Intelligence Engine** designed to solve the "Context Bloat" problem in AI-assisted development. By indexing your codebase into a relational knowledge graph, it allows agents like **Claude Desktop**, **Cursor**, and **Copilot** to navigate complex repositories with 90% fewer tokens.
+Recall Kit is a **Total Recall Engine** for AI-assisted development. It replaces the "context-dump" approach with high-impact, intent-driven tools that allow agents like **Claude**, **Cursor**, and **Windsurf** to understand complex repositories with 80%+ fewer tokens.
 
-
-AI agents (Claude, Cursor, Copilot) are context-starved. Feeding them entire source files is like giving someone a whole book when they only need the table of contents and a few specific chapters.
-
-**TokenZip** transforms your codebase into a **Relational Knowledge Graph**. It indexes symbols, relationships, and call stacks, allowing AI agents to "see" your code's structure and APIs without drowning in redundant implementation logic.
+Unlike traditional tools that reset every session, Recall Kit features **Cortex Intelligence**—an incremental memory layer that stores architectural rules and "gotchas" directly in your codebase.
 
 ---
 
@@ -82,48 +77,28 @@ By reading **Skeletons** during navigation and only fetching full implementation
 
 ---
 
-## 🛠️ Key Features
+## ⚡ The V2 "Recall" Interface
 
-- **Relational Graph Database**: Powered by **SurrealDB**, storing files → modules → symbols → call edges.
-- **Deep Code Analysis**: Uses **Tree-sitter** to extract complex relationships (`calls`, `imports`, `inherits`, `implements`).
-- **AI-Ready (MCP)**: Exposes the graph as an **MCP server** for deep context in Claude Desktop, Cursor, and more.
-- **Incremental Parsing**: Only indexes changed files using content hashing—perfect for large repos.
-- **Git Enrichment**: Maps symbol history to git commits for better context.
-- **Deep Structural Awareness**: Recursive `query_repo_structure` allows agents to traverse Modules -> Files -> Symbols in one shot.
-- **High Concurrency & Stability**: Built-in stale process detection and lock recovery for reliable multi-agent access.
+Recall Kit V2 consolidates 24 redundant tools into **5 high-impact intents**:
+
+1.  **`code_snapshot`**: Adaptive tree navigation with exported symbols and Cortex insights.
+2.  **`code_search`**: Unified semantic search for symbols, classes, and logic.
+3.  **`code_read`**: Semantic projections (Skeleton, Interface, Implementation) to save tokens.
+4.  **`code_trace_flow`**: Unified execution flow tracing (Callers, Callees, References).
+5.  **`code_insight`**: Persistent memory management (Cortex) for guidelines and gotchas.
+
+For a deep dive into the new interface, check out the [**MCP V2 Guide**](docs/mcp_v2_guide.md).
 
 ---
 
-## 🚀 Vision: Agentic Infrastructure for the Modern Stack
+## 🏛️ Incremental Memory (Cortex)
 
-**TokenZip** is not just a compression utility; it is the **Cognitive Infrastructure** that transforms AI from a reactive "agent" into an autonomous **AI Engineer**. By building a persistent, multi-level Knowledge Graph of your codebase, we provide agents with the "Long-Term Memory" they need to act with precision.
+The real power of Recall Kit is its **Incremental Memory**. As an agent works on your code, it can save insights:
+- "This module requires this specific env var."
+- "Never use this legacy utility; use the new one instead."
+- "The auth flow is spread across these 3 files."
 
-### 🧠 Why This Matters
-Vectorised Search and "context-stuffing" are like giving an engineer a stack of Polaroid photos and asking them to build a skyscraper. **TokenZip** gives them the blueprints.
-
-### 🛠 Real-World Value & Use Cases
-
-#### 1. Surgical Context: "Query vs. Read"
-*   **The Problem:** Burning 50k tokens just to explain a project structure to a model.
-*   **The Solution:** TokenZip replaces "context dumps" with **500-token Structured Queries**. Agents don't "read" files to find dependencies; they query the graph.
-*   **Real Use Case:** An agent can instantly locate every implementation of a specific interface across a monorepo without scanning a single unrelated line of code.
-
-#### 2. Autonomous Multi-Hop Reasoning
-*   **The Problem:** "Refactor this function" often leads to broken builds because the AI missed a call site in another module.
-*   **The Solution:** Enables **Recursive Impact Analysis**. The agent traces the "social graph" of your code to see exactly who calls what, where, and how.
-*   **Real Use Case:** Safely refactor a core API endpoint. TokenZip alerts the agent to 12 different call sites across 3 services, allowing for a verified, end-to-end update.
-
-#### 3. Semantic Grounding (The "Ground Truth")
-*   **The Problem:** LLMs "hallucinate" library versions or function signatures when they aren't in the immediate window.
-*   **The Solution:** Moves the AI from *Creative Token Prediction* to **Structural Assembly**. The agent verifies every symbol, import, and type against the Memory Mesh before writing code.
-*   **Real Use Case:** Ensuring new code perfectly matches the specific middleware and error-handling patterns used in the rest of your proprietary codebase.
-
-#### 4. Federated Memory (Institutional Lore)
-*   **The Problem:** "Tribal knowledge" is lost when developers leave or when working across siloed repositories.
-*   **The Solution:** A persistent **Repository of Record**. The graph stores the *reasoning* and *relationships* of the code, not just the text.
-*   **Real Use Case:** A Frontend agent "consults" the memory of the Backend repo to understand a schema change—eliminating the need for manual cross-team coordination.
-
-> **The Bottom Line:** TokenZip moves your AI strategy from "guessing based on text" to "navigating based on logic." It is the foundation for agents that don't just write code, but understand the system they are building.
+These insights are stored in the graph. The next time an agent (or a human colleague's agent) looks at that file, it **automatically remembers** the rule. Quality grows with time.
 
 ---
 

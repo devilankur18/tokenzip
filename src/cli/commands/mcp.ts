@@ -6,23 +6,29 @@ import { TokenBudgetManager } from '../../mcp/token-budget.js';
 
 export const mcpCommand = new Command('mcp')
   .description('Directly test MCP tools from the CLI')
-  .argument('<tool>', 'Tool name (e.g., query_symbol, get_file_symbols)')
-  .argument('[args...]', 'Arguments for the tool (e.g., symbol_name=myFunc or --path=src)')
+  .argument('<tool>', 'Tool name (e.g., code_snapshot, query_symbol)')
+  .argument('[args...]', 'Arguments for the tool (e.g., path=src or --mode=skeleton)')
   .option('--budget <tokens>', 'Token budget for the response', '8000')
   .allowUnknownOption()
   .addHelpText('after', `
-Available Tools:
+Available Tools (Recall Kit V2):
+  code_snapshot          Get semantic repository map (path=...)
+  code_search            Unified semantic search (query=...)
+  code_read              Read semantic projections (path=..., mode=...)
+  code_trace_flow        Trace execution flow (target=...)
+  code_insight           Manage persistent memory (action=...)
+
+Legacy Tools (for comparison):
   get_code_overview      Get semantic repository map
   get_file_tree          Get hierarchical file tree
-  get_codebase_stats     Get high-level repository stats
-  query_symbol           Lookup symbol definition (args: symbol_name=...)
-  find_references        Find callers of a symbol (args: symbol_name=...)
-  smart_file_read        Read semantic file projections (args: path=..., mode=...)
+  query_symbol           Lookup symbol definition
+  find_references        Find callers of a symbol
+  smart_file_read        Read semantic file projections
 
 Examples:
-  $ tokenzip mcp get_code_overview --path=src --depth=2
-  $ tokenzip mcp query_symbol symbol_name=createApp
-  $ tokenzip mcp smart_file_read --path=src/index.ts --mode=skeleton
+  $ tokenzip mcp code_snapshot path=src
+  $ tokenzip mcp code_search query=createApp
+  $ tokenzip mcp code_read path=src/index.ts mode=skeleton
 `)
   .action(async (toolName, argsArray, options, command) => {
     const globalOptions = command.parent.opts();
@@ -32,7 +38,8 @@ Examples:
 
     try {
       const budget = new TokenBudgetManager(parseInt(options.budget, 10));
-      const tools = registerTools(store, repoPath, budget);
+      // Include legacy tools for comparison in the CLI
+      const tools = registerTools(store, repoPath, budget, true);
       
       const tool = tools.find((t: any) => t.name === toolName);
       if (!tool) {
