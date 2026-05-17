@@ -146,14 +146,21 @@ const Playground: React.FC<PlaygroundProps> = ({ db, repoInfo, initialFile, onFi
   const fetchFileSymbols = async (filePath: string) => {
     if (!db) return;
     try {
-      const symRes = await db.query<any[]>('SELECT name FROM symbol WHERE fileId = $fileId', { 
-        fileId: filePath.includes(':') ? filePath : `file:${filePath.replace(/\W/g, '_')}` 
-      });
-      const names = (symRes[0] || []).map((s: any) => s.name);
-      setFileSymbols(names);
-      if (names.length > 0) {
-        setReadSymbol(names[0]);
-        setTraceTarget(names[0]);
+      // Direct lookup by path to ensure SurrealDB StringRecordId or custom ID matches exactly
+      const fileRes = await db.query<any[]>('SELECT id FROM file WHERE path = $path LIMIT 1', { path: filePath });
+      const fileNode = fileRes[0]?.[0];
+      
+      if (fileNode) {
+        const fileId = fileNode.id;
+        const symRes = await db.query<any[]>('SELECT name FROM symbol WHERE fileId = $fileId ORDER BY startLine ASC', { fileId });
+        const names = (symRes[0] || []).map((s: any) => s.name);
+        setFileSymbols(names);
+        if (names.length > 0) {
+          setReadSymbol(names[0]);
+          setTraceTarget(names[0]);
+        }
+      } else {
+        setFileSymbols([]);
       }
     } catch (err) {
       console.error('Failed to fetch file symbols:', err);
@@ -1447,10 +1454,10 @@ const Playground: React.FC<PlaygroundProps> = ({ db, repoInfo, initialFile, onFi
                           )}
 
                           {/* Side-by-Side Code Viewer */}
-                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', minHeight: '400px' }}>
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', minHeight: '400px', width: '100%' }}>
                             
                             {/* Left Box: V2 Optimized skeletal content */}
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', minWidth: 0 }}>
                               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 8px' }}>
                                 <span style={{ fontSize: '0.75rem', color: '#34d399', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '6px', letterSpacing: '0.5px' }}>
                                   <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#34d399' }}></span>
@@ -1466,7 +1473,7 @@ const Playground: React.FC<PlaygroundProps> = ({ db, repoInfo, initialFile, onFi
                             </div>
 
                             {/* Right Box: Legacy raw full content */}
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', minWidth: 0 }}>
                               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 8px' }}>
                                 <span style={{ fontSize: '0.75rem', color: '#f87171', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '6px', letterSpacing: '0.5px' }}>
                                   <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#f87171' }}></span>
