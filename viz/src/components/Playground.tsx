@@ -455,41 +455,40 @@ const Playground: React.FC<PlaygroundProps> = ({ db, repoInfo, initialFile, onFi
 
   const runCodeInsight = (actionOverride?: string, targetOverride?: string) => {
     const action = actionOverride || insightAction;
-    const args: any = { action };
 
     if (action === 'recall') {
-      args.target = targetOverride || insightTarget;
-      if (!args.target) {
+      const target = targetOverride || insightTarget;
+      if (!target) {
         setError('Recall target is required.');
         return;
       }
+      executeToolCall('recall_instruction', { target });
     } else if (action === 'save') {
-      args.target = targetOverride || insightTarget;
-      if (!args.target || !insightNoteTitle || !insightNoteSummary) {
+      const target = targetOverride || insightTarget;
+      if (!target || !insightNoteTitle || !insightNoteSummary) {
         setError('Target path, Title, and Summary are required to save an insight.');
         return;
       }
-      args.note = {
+      executeToolCall('remember_instruction', {
+        target,
         title: insightNoteTitle,
         summary: insightNoteSummary,
         category: insightNoteCategory,
         scope: insightNoteScope
-      };
+      });
     } else if (action === 'search') {
-      args.query = insightQuery;
-      if (!args.query) {
+      if (!insightQuery) {
         setError('Search query is required.');
         return;
       }
+      executeToolCall('search_instruction', { query: insightQuery });
     } else if (action === 'forget') {
-      args.id = insightId;
-      if (!args.id) {
+      if (!insightId) {
         setError('Note ID is required to forget.');
         return;
       }
+      executeToolCall('forget_instruction', { id: insightId });
     }
-
-    executeToolCall('code_insight', args);
   };
 
   const runLegacyCompare = async (filePath: string) => {
@@ -1738,6 +1737,107 @@ const Playground: React.FC<PlaygroundProps> = ({ db, repoInfo, initialFile, onFi
                           })()}
 
                         </div>
+                      ) : activeTool === 'code_insight' ? (
+                        /* Dedicated premium Cortex memory instruction viewer */
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', width: '100%' }}>
+                          
+                          {/* Success or Action Status Banner */}
+                          <div style={{ 
+                            background: 'linear-gradient(135deg, rgba(168,85,247,0.08), rgba(99,102,241,0.08))', 
+                            border: '1px solid rgba(168,85,247,0.25)', 
+                            borderRadius: '12px', 
+                            padding: '14px 20px', 
+                            display: 'flex', 
+                            justifyContent: 'space-between', 
+                            alignItems: 'center',
+                            boxShadow: '0 0 15px rgba(168,85,247,0.05)'
+                          }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <Zap size={16} style={{ color: '#a855f7' }} />
+                              <span style={{ fontSize: '0.85rem', color: '#f8fafc', fontWeight: 800 }}>
+                                Cortex Memory System Active ({insightAction.toUpperCase()}):
+                              </span>
+                            </div>
+                            <div style={{ fontSize: '0.78rem', color: '#cbd5e1', fontWeight: 500 }}>
+                              🗂️ Persistent local SurrealDB graph relationships
+                            </div>
+                          </div>
+
+                          {/* Render returned instructions or raw JSON */}
+                          {(() => {
+                            try {
+                              const text = toolResult?.content?.[0]?.text || '';
+                              let parsed: any = null;
+                              if (text.trim().startsWith('{') || text.trim().startsWith('[')) {
+                                parsed = JSON.parse(text);
+                              }
+
+                              const list = parsed?.instructions || parsed?.results || [];
+
+                              if (list.length > 0) {
+                                return (
+                                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '16px', width: '100%' }}>
+                                    {list.map((noteObj: any, i: number) => (
+                                      <div 
+                                        key={i}
+                                        style={{ 
+                                          padding: '16px', 
+                                          borderRadius: '14px', 
+                                          background: 'rgba(255,255,255,0.02)', 
+                                          borderLeft: `5px solid ${
+                                            noteObj.category === 'gotcha' ? '#f59e0b' : 
+                                            noteObj.category === 'todo' ? '#3b82f6' : 
+                                            noteObj.category === 'architecture' ? '#a855f7' : '#10b981'
+                                          }`,
+                                          borderTop: '1px solid rgba(255,255,255,0.04)',
+                                          borderRight: '1px solid rgba(255,255,255,0.04)',
+                                          borderBottom: '1px solid rgba(255,255,255,0.04)',
+                                          boxShadow: '0 4px 20px rgba(0,0,0,0.2)'
+                                        }}
+                                      >
+                                        <div style={{ fontSize: '0.85rem', fontWeight: 800, color: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                          <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                            {noteObj.title}
+                                          </span>
+                                          <span style={{ 
+                                            fontSize: '0.58rem', fontWeight: 950, padding: '2px 7px', borderRadius: '6px', textTransform: 'uppercase',
+                                            background: noteObj.category === 'gotcha' ? 'rgba(245,158,11,0.15)' : 
+                                                        noteObj.category === 'todo' ? 'rgba(59,130,246,0.15)' : 
+                                                        noteObj.category === 'architecture' ? 'rgba(168,85,247,0.15)' : 'rgba(16,185,129,0.15)',
+                                            color: noteObj.category === 'gotcha' ? '#f59e0b' : 
+                                                   noteObj.category === 'todo' ? '#3b82f6' : 
+                                                   noteObj.category === 'architecture' ? '#a855f7' : '#10b981'
+                                          }}>
+                                            {noteObj.category}
+                                          </span>
+                                        </div>
+                                        <p style={{ fontSize: '0.76rem', color: '#94a3b8', lineHeight: '1.45', margin: '0 0 10px 0' }}>{noteObj.summary}</p>
+                                        {noteObj.details && (
+                                          <div style={{ fontSize: '0.7rem', color: '#64748b', background: '#07070a', padding: '8px 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.03)', fontFamily: '"Fira Code", monospace', whiteSpace: 'pre-wrap', marginBottom: '10px' }}>
+                                            {noteObj.details}
+                                          </div>
+                                        )}
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '12px', fontSize: '0.62rem', color: '#4b5563', borderTop: '1px solid rgba(255,255,255,0.03)', paddingTop: '8px' }}>
+                                          <span>ID: <code style={{ color: '#cbd5e1' }}>{noteObj.id}</code></span>
+                                          {noteObj.priority && <span>Priority: <strong style={{ color: noteObj.priority === 'critical' ? '#ef4444' : '#64748b' }}>{noteObj.priority}</strong></span>}
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                );
+                              }
+                            } catch (e) {
+                              // Fallback to text if not JSON
+                            }
+
+                            // Fallback rendering
+                            return (
+                              <pre className="code-box" style={{ flex: 1, margin: 0, padding: '20px', overflow: 'auto', fontSize: '0.75rem', fontFamily: '"Fira Code", monospace', background: '#050507', color: '#cbd5e1', lineHeight: '1.6', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.06)' }}>
+                                {getCleanResultText()}
+                              </pre>
+                            );
+                          })()}
+                        </div>
                       ) : (
                         /* Standard JSON/Code output render */
                         <pre className="code-box" style={{ flex: 1, margin: 0, padding: '20px', overflow: 'auto', fontSize: '0.75rem', fontFamily: '"Fira Code", monospace', background: '#050507', color: '#cbd5e1', lineHeight: '1.6', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.06)' }}>
@@ -1746,13 +1846,13 @@ const Playground: React.FC<PlaygroundProps> = ({ db, repoInfo, initialFile, onFi
                       )}
 
                       {/* Interactive Cortex Notes Renderer - if returned by server */}
-                      {(toolResult._cortex || toolResult._insights || (toolResult.insights && toolResult.insights.length > 0)) && (
+                      {(toolResult.instructions || toolResult.results || toolResult._cortex || toolResult._insights || (toolResult.insights && toolResult.insights.length > 0)) && (
                         <div style={{ marginTop: '10px', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '16px' }}>
                           <h4 style={{ fontSize: '0.8rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px', color: '#34d399', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '12px' }}>
-                            <BookOpen size={14} /> Persistent Cortex Architecture Rules ({((toolResult._cortex?.notes || toolResult._insights || toolResult.insights || []) as any).length} loaded)
+                            <BookOpen size={14} /> Persistent Cortex Architecture Rules ({((toolResult.instructions || toolResult.results || toolResult._cortex?.notes || toolResult._insights || toolResult.insights || []) as any).length} loaded)
                           </h4>
                           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '10px' }}>
-                            {((toolResult._cortex?.notes || toolResult._insights || toolResult.insights || []) as any).map((insight: any, i: number) => {
+                            {((toolResult.instructions || toolResult.results || toolResult._cortex?.notes || toolResult._insights || toolResult.insights || []) as any).map((insight: any, i: number) => {
                               const noteObj = typeof insight === 'string' ? { title: 'Architectural Note', summary: insight, category: 'guideline' } : insight;
                               return (
                                 <div 

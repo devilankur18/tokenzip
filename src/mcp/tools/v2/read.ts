@@ -62,6 +62,35 @@ export function createReadTool(store: IStore, repoPath: string, budget: TokenBud
 
         for (const fPath of filePaths) {
           const absPath = path.resolve(repoPath, fPath);
+          const isFullFile = mode === 'full' || (mode === 'implementation' && symbolList.length === 0);
+
+          // Direct disk read for full uncollapsed mode to match raw file_read and bypass DB queries/indexing
+          if (isFullFile && fs.existsSync(absPath)) {
+            try {
+              const rawContent = fs.readFileSync(absPath, 'utf8');
+              let fileSymbolCount = 0;
+              try {
+                // Try resolving symbol count from DB if indexed, but don't trigger dynamic indexing
+                const fileRes = await store.query<any>('SELECT id FROM file WHERE path = $path LIMIT 1', { path: fPath });
+                if (fileRes.length > 0) {
+                  const countRes = await store.query<any>('SELECT count() FROM symbol WHERE fileId = $fileId', { fileId: fileRes[0].id });
+                  fileSymbolCount = countRes[0]?.count || 0;
+                }
+              } catch (e) {
+                // Ignore DB errors during symbol count fetch for full mode
+              }
+
+              filesResults.push({
+                filePath: fPath,
+                content: rawContent,
+                symbol_count: fileSymbolCount
+              });
+              totalSymbolsCount += fileSymbolCount;
+              continue;
+            } catch (e: any) {
+              console.error(`Direct disk read failed for ${fPath} in full mode:`, e.message);
+            }
+          }
 
           // 1. Resolve fileId and check status
           let fileRes = await store.query<any>('SELECT id, parse_status FROM file WHERE path = $path LIMIT 1', { path: fPath });
@@ -99,23 +128,13 @@ export function createReadTool(store: IStore, repoPath: string, budget: TokenBud
           const fileNode = fileRes[0];
           const fileId = fileNode.id;
 
-          const isFullFile = mode === 'full' || (mode === 'implementation' && symbolList.length === 0);
           const strategyMode = mode === 'implementation' ? 'implementation_of' : 
                               mode === 'interface' ? 'interface_only' : 'skeleton';
 
           let fileContent = '';
           let fileSymbolCount = 0;
 
-          if (isFullFile) {
-            // Full uncollapsed reading mode!
-            try {
-              fileContent = fs.readFileSync(absPath, 'utf8');
-              const countRes = await store.query<any>('SELECT count() FROM symbol WHERE fileId = $fileId', { fileId });
-              fileSymbolCount = countRes[0]?.count || 0;
-            } catch (e: any) {
-              fileContent = `Error reading full file: ${e.message}`;
-            }
-          } else if (strategyMode === 'implementation_of') {
+          if (strategyMode === 'implementation_of') {
             if (symbolList.length > 1) {
               // Batch read multiple symbols inside this file!
               const symbolContents = [];

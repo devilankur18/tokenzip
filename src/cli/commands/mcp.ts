@@ -16,7 +16,10 @@ Available Tools (Recall Kit V2):
   code_search            Unified semantic search (query=...)
   code_read              Read semantic projections (path=..., mode=...)
   code_trace_flow        Trace execution flow (target=...)
-  code_insight           Manage persistent memory (action=...)
+  remember_instruction   Save persistent guideline/gotcha (target=..., title=..., summary=...)
+  recall_instruction     Retrieve instructions for path (target=...)
+  forget_instruction     Archive instruction by ID (id=...)
+  search_instruction     Search instructions registry (query=...)
 
 Legacy Tools (for comparison):
   get_code_overview      Get semantic repository map

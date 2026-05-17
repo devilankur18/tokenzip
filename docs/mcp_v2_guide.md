@@ -201,33 +201,107 @@ export function registerTools(server: McpServer, budget: TokenBudgetManager): vo
 
 ---
 
-### 5. `code_insight` (The Cortex Memory System)
-* **Intent**: "I need to record an architectural gotcha or checklist so future AI agents (and human developers) automatically see it when they touch this module."
+### 5. Persistent Instruction Suite (The Cortex Memory System)
+* **Intent**: "I need to record and retrieve codebase specifications, gotchas, architecture notes, and developer workflows so future AI agents (and human developers) automatically inherit this knowledge."
 * **Legacy Way**: Repeating global rules, patterns, and Gotchas in long developer prompts inside system configs. These rules are lost the moment the model's context resets.
-* **The V2 Way**: Manages a persistent memory system in the repository. Notes are linked to specific files or scopes, saved to a SurrealDB graph network, and automatically loaded during snapshots.
+* **The V2 Way**: Replaces monolithic multi-purpose tool parameters with **4 granular, intent-driven memory tools** that strictly manage persistent codebase intelligence in a local SurrealDB graph.
 
-#### 📝 Concrete Input (Save Guideline)
+---
+
+#### A. `remember_instruction`
+Save persistent development guidelines, gotchas, architecture specifications, or todos for files, modules, or the global codebase.
+
+##### 📝 Concrete Input
 ```json
 {
-  "action": "save",
   "target": "src/storage",
-  "note": {
-    "title": "SurrealDB Port Config Gotcha",
-    "summary": "Always parse active db ports from search url query params (?port=33419) when running under Vite visualizer workspace.",
-    "category": "gotcha",
-    "scope": "module"
-  }
+  "title": "SurrealDB Port Config Gotcha",
+  "summary": "Always parse active db ports from search url query params (?port=33419) when running under Vite visualizer workspace.",
+  "category": "gotcha",
+  "scope": "module"
 }
 ```
 
-#### 📥 Real-World Output
+##### 📥 Real-World Output
+```text
+Successfully saved rule: annotation:surreal_port_config_gotcha
+Scope: module
+Target: src/storage
+```
+
+---
+
+#### B. `recall_instruction`
+Retrieve active persistent guidelines, gotchas, and instructions relevant to a given target path, with parent-scope directory inheritance.
+
+##### 📝 Concrete Input
 ```json
 {
-  "success": true,
-  "insightId": "annotation:surreal_port_config_gotcha",
-  "target": "src/storage",
-  "scope": "module",
-  "message": "Cortex memory node established. Note will automatically sync to all sub-files in the src/storage module hierarchy."
+  "target": "src/storage/surreal/store.ts"
+}
+```
+
+##### 📥 Real-World Output
+```json
+{
+  "target": "src/storage/surreal/store.ts",
+  "instructions": [
+    {
+      "id": "annotation:surreal_port_config_gotcha",
+      "category": "gotcha",
+      "title": "SurrealDB Port Config Gotcha",
+      "summary": "Always parse active db ports from search url query params (?port=33419) when running under Vite visualizer workspace.",
+      "priority": "important",
+      "tags": []
+    }
+  ]
+}
+```
+
+---
+
+#### C. `forget_instruction`
+Archive/soft-delete a persistent instruction by its Record ID.
+
+##### 📝 Concrete Input
+```json
+{
+  "id": "annotation:surreal_port_config_gotcha",
+  "reason": "Superseded by automatic port negotiation feature."
+}
+```
+
+##### 📥 Real-World Output
+```text
+Successfully archived instruction: annotation:surreal_port_config_gotcha
+```
+
+---
+
+#### D. `search_instruction`
+Perform global keyword search over all active persistent instructions in the repository.
+
+##### 📝 Concrete Input
+```json
+{
+  "query": "SurrealDB"
+}
+```
+
+##### 📥 Real-World Output
+```json
+{
+  "query": "SurrealDB",
+  "results": [
+    {
+      "id": "annotation:surreal_port_config_gotcha",
+      "category": "gotcha",
+      "title": "SurrealDB Port Config Gotcha",
+      "summary": "Always parse active db ports from search url query params (?port=33419) when running under Vite visualizer workspace.",
+      "priority": "important",
+      "tags": []
+    }
+  ]
 }
 ```
 

@@ -111,4 +111,13 @@ describe('code_read (v2)', () => {
     const result = await tool.handler({ path: 'app.ts', mode: 'implementation' });
     expect(result.content[0].text).toBe('entire full file content'); // Matches mock
   });
+
+  it('should bypass database check and dynamic indexing entirely for unindexed files in full mode', async () => {
+    // If the file is not in database, query for main record returns empty array
+    mockStore.query.mockResolvedValue([]);
+
+    // Running code_read in full mode should still read the file from disk directly and succeed instantly
+    const result = await tool.handler({ path: 'new-file.ts', mode: 'full' });
+    expect(result.content[0].text).toBe('entire full file content');
+  });
 });

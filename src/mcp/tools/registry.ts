@@ -8,7 +8,12 @@ import { createSnapshotTool } from './v2/snapshot.js';
 import { createSearchTool } from './v2/search.js';
 import { createReadTool } from './v2/read.js';
 import { createTraceTool } from './v2/trace.js';
-import { createInsightTool } from './v2/insight.js';
+import { 
+  createRememberTool, 
+  createRecallTool, 
+  createForgetTool, 
+  createSearchTool as createInstructionSearchTool 
+} from './v2/instruction.js';
 
 import { createStructureTools } from './structure.js';
 import { createSymbolTools } from './symbol.js';
@@ -30,7 +35,10 @@ export function registerTools(store: IStore, repoPath: string, budget: TokenBudg
     createSearchTool(store, budget),
     createReadTool(store, repoPath, budget),
     createTraceTool(store, budget),
-    createInsightTool(store, budget)
+    createRememberTool(store),
+    createRecallTool(store, budget),
+    createForgetTool(store),
+    createInstructionSearchTool(store, budget)
   ];
 
   if (includeLegacy) {
