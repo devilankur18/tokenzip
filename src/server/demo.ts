@@ -5,8 +5,7 @@ import path from 'path';
 import fs from 'fs/promises';
 import { SurrealStore } from '../storage/surreal/store.js';
 import { Indexer } from '../engine/indexer.js';
-import { createSmartFileReadTools } from '../mcp/tools/smart-file-read.js';
-import { createStructureTools } from '../mcp/tools/structure.js';
+import { registerTools } from '../mcp/tools/registry.js';
 import { TokenBudgetManager } from '../mcp/token-budget.js';
 
 export async function startDemoServer(
@@ -28,10 +27,7 @@ export async function startDemoServer(
 
   if (defaultSession) {
     const { name, path: repoPath, store } = defaultSession;
-    const tools = [
-      ...createSmartFileReadTools(store, repoPath, budget),
-      ...createStructureTools(store, repoPath, budget)
-    ];
+    const tools = registerTools(store, repoPath, budget, true);
     sessions.set(name, { store, repoPath, tools });
     console.log(`[Demo] Auto-registered local repo: ${name}`);
   }
@@ -58,10 +54,7 @@ export async function startDemoServer(
       const indexer = new Indexer(store, repoPath);
       await indexer.indexCodebase();
 
-      const tools = [
-        ...createSmartFileReadTools(store, repoPath, budget),
-        ...createStructureTools(store, repoPath, budget)
-      ];
+      const tools = registerTools(store, repoPath, budget, true);
 
       sessions.set(repoName, { store, repoPath, tools });
 

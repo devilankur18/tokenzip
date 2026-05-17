@@ -7,4 +7,5 @@ export * from './mcp/tools/smart-file-read.js';
 export * from './mcp/tools/navigation.js';
 export * from './mcp/tools/structure.js';
 export * from './mcp/token-budget.js';
+export * from './mcp/tools/registry.js';
 export * from './utils/hash.js';

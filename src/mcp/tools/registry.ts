@@ -39,7 +39,7 @@ export function registerTools(store: IStore, repoPath: string, budget: TokenBudg
       ...createSymbolTools(store, repoPath, budget),
       ...createLegacySearchTools(store, repoPath, budget),
       ...createNavigationTools(store, repoPath, budget),
-      ...createCortexTools(store, budget),
+      ...createCortexTools(store, repoPath, budget),
       ...createSmartFileReadTools(store, repoPath, budget)
     );
   }
