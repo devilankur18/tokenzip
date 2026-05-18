@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Activity, Code2, FileCode, Zap, Cpu, Settings, 
   Layers, Search, GitMerge, Info, Play, 
@@ -6,6 +6,208 @@ import {
   BookOpen, ChevronRight, AlertTriangle, Eye, Server, Compass
 } from 'lucide-react';
 import { Surreal } from 'surrealdb';
+
+
+const parseAsciiTree = (text: string) => {
+  const lines = text.split('\n');
+  const treeNodes: any[] = [];
+  const activeFoldersAtDepth: string[] = [];
+
+  for (const line of lines) {
+    if (!line.trim()) continue;
+
+    // Matches visual branches like "├── ", "└── ", "│   ", "    "
+    const prefixMatch = line.match(/^([│\s├└──\s]*)/);
+    const prefix = prefixMatch ? prefixMatch[0] : '';
+    
+    // Convert characters to single spaces to determine hierarchy depth
+    const cleanPrefix = prefix.replace(/─/g, '').replace(/├/g, '').replace(/└/g, '').replace(/│/g, ' ');
+    const depth = Math.floor(cleanPrefix.length / 4);
+
+    const content = line.substring(prefix.length).trim();
+    if (!content) continue;
+
+    // Match emoji icon and node label
+    const match = content.match(/^([^\s\w]+)\s+(.+)$/);
+    const icon = match ? match[1] : '';
+    let name = match ? match[2] : content;
+
+    // Clean up symbol brackets like "[📄 index.ts, 𝑓 run]"
+    let exports: string[] = [];
+    if (name.includes('[') && name.endsWith(']')) {
+      const start = name.indexOf('[');
+      const brackets = name.substring(start + 1, name.length - 1);
+      name = name.substring(0, start).trim();
+      exports = brackets.split(',').map(s => s.trim());
+    }
+
+    const isFolder = icon === '📂' || icon === '📁' || icon === '🏠' || icon === '📦';
+    
+    // Reconstruct approximate paths
+    activeFoldersAtDepth[depth] = name;
+    const parentPath = activeFoldersAtDepth.slice(1, depth).join('/');
+    const fullPath = parentPath ? `${parentPath}/${name}` : name;
+
+    treeNodes.push({
+      depth,
+      icon,
+      name,
+      fullPath,
+      isFolder,
+      exports,
+      originalLine: line
+    });
+  }
+
+  return treeNodes;
+};
+
+interface InteractiveAsciiTreeProps {
+  text: string;
+  onFileClick: (path: string) => void;
+}
+
+const InteractiveAsciiTree: React.FC<InteractiveAsciiTreeProps> = ({ text, onFileClick }) => {
+  const [collapsedPaths, setCollapsedPaths] = useState<Record<string, boolean>>({});
+  
+  const nodes = useMemo(() => {
+    try {
+      return parseAsciiTree(text);
+    } catch (e) {
+      return [];
+    }
+  }, [text]);
+
+  if (nodes.length === 0) {
+    return (
+      <pre className="code-box" style={{ flex: 1, margin: 0, padding: '20px', overflow: 'auto', fontSize: '0.75rem', fontFamily: '"Fira Code", monospace', background: '#050507', color: '#cbd5e1', lineHeight: '1.6', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.06)' }}>
+        {text}
+      </pre>
+    );
+  }
+
+  const toggleCollapse = (path: string) => {
+    setCollapsedPaths(prev => ({ ...prev, [path]: !prev[path] }));
+  };
+
+  const visibleNodes = [];
+  let currentHiddenPrefixDepth = 999;
+
+  for (const node of nodes) {
+    if (node.depth > currentHiddenPrefixDepth) {
+      continue;
+    } else {
+      currentHiddenPrefixDepth = 999;
+    }
+
+    visibleNodes.push(node);
+
+    if (node.isFolder && collapsedPaths[node.fullPath]) {
+      currentHiddenPrefixDepth = node.depth;
+    }
+  }
+
+  return (
+    <div style={{
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '2px',
+      padding: '20px',
+      borderRadius: '16px',
+      background: 'rgba(9, 9, 14, 0.65)',
+      border: '1px solid rgba(255,255,255,0.06)',
+      backdropFilter: 'blur(12px)',
+      boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+      maxHeight: '600px',
+      overflowY: 'auto',
+      fontFamily: '"Fira Code", monospace',
+      fontSize: '0.76rem',
+      lineHeight: '1.6',
+      width: '100%'
+    }}>
+      {visibleNodes.map((node, index) => {
+        const isCollapsed = collapsedPaths[node.fullPath];
+        return (
+          <div 
+            key={index}
+            style={{
+              paddingLeft: `${node.depth * 18}px`,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              paddingTop: '5px',
+              paddingBottom: '5px',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              transition: 'all 0.15s ease-in-out',
+              userSelect: 'none',
+              background: node.isFolder ? 'rgba(255,255,255,0.015)' : 'transparent',
+              border: node.isFolder ? '1px solid rgba(255,255,255,0.01)' : 'none'
+            }}
+            onClick={() => {
+              if (node.isFolder) {
+                toggleCollapse(node.fullPath);
+              } else {
+                onFileClick(node.fullPath);
+              }
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'rgba(99,102,241,0.08)';
+              e.currentTarget.style.transform = 'translateX(2px)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = node.isFolder ? 'rgba(255,255,255,0.015)' : 'transparent';
+              e.currentTarget.style.transform = 'none';
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden' }}>
+              <span style={{ color: node.isFolder ? '#818cf8' : '#64748b', fontSize: '0.65rem', width: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {node.isFolder ? (isCollapsed ? '▶' : '▼') : '•'}
+              </span>
+              <span style={{ fontSize: '0.95rem' }}>{node.icon}</span>
+              <span style={{ 
+                fontWeight: node.isFolder ? 800 : 500, 
+                color: node.isFolder ? '#cbd5e1' : '#f8fafc',
+                textOverflow: 'ellipsis',
+                overflow: 'hidden',
+                whiteSpace: 'nowrap'
+              }}>
+                {node.name}
+              </span>
+            </div>
+            
+            {node.exports && node.exports.length > 0 && (
+              <div style={{ display: 'flex', gap: '6px', overflow: 'hidden', marginLeft: '12px', marginRight: '6px' }}>
+                {node.exports.slice(0, 3).map((exp: any, i: number) => (
+                  <span 
+                    key={i} 
+                    style={{ 
+                      fontSize: '0.58rem', 
+                      background: 'rgba(99,102,241,0.12)', 
+                      border: '1px solid rgba(99,102,241,0.2)',
+                      color: '#a5b4fc', 
+                      padding: '2px 6px', 
+                      borderRadius: '5px',
+                      whiteSpace: 'nowrap',
+                      fontWeight: 700
+                    }}
+                  >
+                    {exp}
+                  </span>
+                ))}
+                {node.exports.length > 3 && (
+                  <span style={{ fontSize: '0.58rem', color: '#64748b', alignSelf: 'center' }}>
+                    +{node.exports.length - 3}
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+};
 
 interface PlaygroundProps {
   db: Surreal | null;
@@ -571,6 +773,15 @@ const Playground: React.FC<PlaygroundProps> = ({ db, repoInfo, initialFile, onFi
     }
   };
 
+  const handleFileSelectionFromTree = (filePath: string) => {
+    setSelectedFile(filePath);
+    setReadPath(filePath);
+    setActiveTool('code_read');
+    setToolResult(null);
+    setError(null);
+    runCodeRead(filePath, 'skeleton');
+  };
+
   // Helper to extract clean text response
   const getCleanResultText = () => {
     if (!toolResult) return '';
@@ -590,6 +801,29 @@ const Playground: React.FC<PlaygroundProps> = ({ db, repoInfo, initialFile, onFi
     } catch (e) {}
     
     return text;
+  };
+
+  // Helper to parse V2 instructions array from toolResult
+  const getParsedInstructions = () => {
+    if (!toolResult) return null;
+    try {
+      let text = '';
+      if (Array.isArray(toolResult.content) && toolResult.content[0]) {
+        text = toolResult.content[0].text || '';
+      } else {
+        text = typeof toolResult === 'string' ? toolResult : JSON.stringify(toolResult);
+      }
+      const parsed = JSON.parse(text);
+      if (parsed && typeof parsed === 'object') {
+        if (Array.isArray(parsed.instructions)) {
+          return parsed.instructions;
+        }
+        if (Array.isArray(parsed.results)) {
+          return parsed.results;
+        }
+      }
+    } catch (e) {}
+    return null;
   };
 
   // Helper to render beautiful visual V2 Comparative Advantages
@@ -956,7 +1190,7 @@ const Playground: React.FC<PlaygroundProps> = ({ db, repoInfo, initialFile, onFi
                 display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', borderBottom: activeTool === 'code_insight' ? '2px solid #6366f1' : 'none'
               }}
             >
-              <Layers size={14} /> code_insight
+              <Layers size={14} /> instruction_tools
             </button>
             <button 
               className={`tab-btn ${activeTool === 'legacy_compare' ? 'active' : ''}`} 
@@ -1174,20 +1408,20 @@ const Playground: React.FC<PlaygroundProps> = ({ db, repoInfo, initialFile, onFi
                 </>
               )}
 
-              {/* CODE INSIGHT TOOL INPUTS */}
+              {/* CORTEX INSTRUCTION GRANULAR TOOLS */}
               {activeTool === 'code_insight' && (
                 <>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: 600 }}>Action:</label>
+                    <label style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: 600 }}>Active Instruction Tool:</label>
                     <select 
                       value={insightAction} 
                       onChange={(e) => setInsightAction(e.target.value as any)}
                       style={{ background: '#121218', border: '1px solid rgba(255,255,255,0.1)', color: 'white', padding: '8px 12px', borderRadius: '8px', fontSize: '0.8rem', outline: 'none', cursor: 'pointer' }}
                     >
-                      <option value="recall">Recall Insights for Path</option>
-                      <option value="save">Save/Store New Architectural Note</option>
-                      <option value="search">Search Insights Registry</option>
-                      <option value="forget">Forget / Archive Insight</option>
+                      <option value="recall">recall_instruction (Recall Active Guidelines)</option>
+                      <option value="save">remember_instruction (Store Persistent Note)</option>
+                      <option value="search">search_instruction (Query Guidelines Registry)</option>
+                      <option value="forget">forget_instruction (Archive / Soft-Delete)</option>
                     </select>
                   </div>
 
@@ -1435,10 +1669,11 @@ const Playground: React.FC<PlaygroundProps> = ({ db, repoInfo, initialFile, onFi
                       
                       {/* V2 Output Rendering logic depending on chosen tool */}
                       {activeTool === 'code_snapshot' && snapshotFormat === 'tree' ? (
-                        /* Beautified ASCII Tree rendering */
-                        <pre className="code-box" style={{ flex: 1, margin: 0, padding: '20px', overflow: 'auto', fontSize: '0.75rem', fontFamily: '"Fira Code", monospace', background: '#050507', color: '#cbd5e1', lineHeight: '1.6', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.06)' }}>
-                          {getCleanResultText()}
-                        </pre>
+                        /* Beautiful Visual Collapsible Directory Tree rendering */
+                        <InteractiveAsciiTree 
+                          text={getCleanResultText()} 
+                          onFileClick={handleFileSelectionFromTree} 
+                        />
                       ) : activeTool === 'code_search' && toolResult.matches ? (
                         /* Beautified Search Cards rendering */
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', width: '100%' }}>
@@ -1500,6 +1735,13 @@ const Playground: React.FC<PlaygroundProps> = ({ db, repoInfo, initialFile, onFi
                                 {toolResult.incoming.map((caller: any, index: number) => (
                                   <div 
                                     key={caller.name} 
+                                    onClick={() => {
+                                      setTraceTarget(caller.name);
+                                      executeToolCall('code_trace_flow', {
+                                        target: caller.name,
+                                        direction: traceDirection
+                                      });
+                                    }}
                                     style={{ 
                                       display: 'flex', 
                                       flexDirection: 'column',
@@ -1508,7 +1750,19 @@ const Playground: React.FC<PlaygroundProps> = ({ db, repoInfo, initialFile, onFi
                                       border: '1px solid rgba(239,68,68,0.15)', 
                                       borderRadius: '10px', 
                                       fontSize: '0.8rem',
-                                      position: 'relative'
+                                      position: 'relative',
+                                      cursor: 'pointer',
+                                      transition: 'all 0.15s ease-in-out'
+                                    }}
+                                    onMouseEnter={(e) => {
+                                      e.currentTarget.style.background = 'rgba(239,68,68,0.08)';
+                                      e.currentTarget.style.borderColor = 'rgba(239,68,68,0.3)';
+                                      e.currentTarget.style.transform = 'translateY(-1px)';
+                                    }}
+                                    onMouseLeave={(e) => {
+                                      e.currentTarget.style.background = 'rgba(239,68,68,0.03)';
+                                      e.currentTarget.style.borderColor = 'rgba(239,68,68,0.15)';
+                                      e.currentTarget.style.transform = 'none';
                                     }}
                                   >
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -1583,6 +1837,13 @@ const Playground: React.FC<PlaygroundProps> = ({ db, repoInfo, initialFile, onFi
                                 {toolResult.outgoing.map((callee: any, index: number) => (
                                   <div 
                                     key={callee.name} 
+                                    onClick={() => {
+                                      setTraceTarget(callee.name);
+                                      executeToolCall('code_trace_flow', {
+                                        target: callee.name,
+                                        direction: traceDirection
+                                      });
+                                    }}
                                     style={{ 
                                       display: 'flex', 
                                       flexDirection: 'column',
@@ -1590,7 +1851,19 @@ const Playground: React.FC<PlaygroundProps> = ({ db, repoInfo, initialFile, onFi
                                       background: 'rgba(52,211,153,0.03)', 
                                       border: '1px solid rgba(52,211,153,0.15)', 
                                       borderRadius: '10px', 
-                                      fontSize: '0.8rem'
+                                      fontSize: '0.8rem',
+                                      cursor: 'pointer',
+                                      transition: 'all 0.15s ease-in-out'
+                                    }}
+                                    onMouseEnter={(e) => {
+                                      e.currentTarget.style.background = 'rgba(52,211,153,0.08)';
+                                      e.currentTarget.style.borderColor = 'rgba(52,211,153,0.3)';
+                                      e.currentTarget.style.transform = 'translateY(-1px)';
+                                    }}
+                                    onMouseLeave={(e) => {
+                                      e.currentTarget.style.background = 'rgba(52,211,153,0.03)';
+                                      e.currentTarget.style.borderColor = 'rgba(52,211,153,0.15)';
+                                      e.currentTarget.style.transform = 'none';
                                     }}
                                   >
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -1737,107 +2010,6 @@ const Playground: React.FC<PlaygroundProps> = ({ db, repoInfo, initialFile, onFi
                           })()}
 
                         </div>
-                      ) : activeTool === 'code_insight' ? (
-                        /* Dedicated premium Cortex memory instruction viewer */
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', width: '100%' }}>
-                          
-                          {/* Success or Action Status Banner */}
-                          <div style={{ 
-                            background: 'linear-gradient(135deg, rgba(168,85,247,0.08), rgba(99,102,241,0.08))', 
-                            border: '1px solid rgba(168,85,247,0.25)', 
-                            borderRadius: '12px', 
-                            padding: '14px 20px', 
-                            display: 'flex', 
-                            justifyContent: 'space-between', 
-                            alignItems: 'center',
-                            boxShadow: '0 0 15px rgba(168,85,247,0.05)'
-                          }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                              <Zap size={16} style={{ color: '#a855f7' }} />
-                              <span style={{ fontSize: '0.85rem', color: '#f8fafc', fontWeight: 800 }}>
-                                Cortex Memory System Active ({insightAction.toUpperCase()}):
-                              </span>
-                            </div>
-                            <div style={{ fontSize: '0.78rem', color: '#cbd5e1', fontWeight: 500 }}>
-                              🗂️ Persistent local SurrealDB graph relationships
-                            </div>
-                          </div>
-
-                          {/* Render returned instructions or raw JSON */}
-                          {(() => {
-                            try {
-                              const text = toolResult?.content?.[0]?.text || '';
-                              let parsed: any = null;
-                              if (text.trim().startsWith('{') || text.trim().startsWith('[')) {
-                                parsed = JSON.parse(text);
-                              }
-
-                              const list = parsed?.instructions || parsed?.results || [];
-
-                              if (list.length > 0) {
-                                return (
-                                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '16px', width: '100%' }}>
-                                    {list.map((noteObj: any, i: number) => (
-                                      <div 
-                                        key={i}
-                                        style={{ 
-                                          padding: '16px', 
-                                          borderRadius: '14px', 
-                                          background: 'rgba(255,255,255,0.02)', 
-                                          borderLeft: `5px solid ${
-                                            noteObj.category === 'gotcha' ? '#f59e0b' : 
-                                            noteObj.category === 'todo' ? '#3b82f6' : 
-                                            noteObj.category === 'architecture' ? '#a855f7' : '#10b981'
-                                          }`,
-                                          borderTop: '1px solid rgba(255,255,255,0.04)',
-                                          borderRight: '1px solid rgba(255,255,255,0.04)',
-                                          borderBottom: '1px solid rgba(255,255,255,0.04)',
-                                          boxShadow: '0 4px 20px rgba(0,0,0,0.2)'
-                                        }}
-                                      >
-                                        <div style={{ fontSize: '0.85rem', fontWeight: 800, color: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                                          <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                            {noteObj.title}
-                                          </span>
-                                          <span style={{ 
-                                            fontSize: '0.58rem', fontWeight: 950, padding: '2px 7px', borderRadius: '6px', textTransform: 'uppercase',
-                                            background: noteObj.category === 'gotcha' ? 'rgba(245,158,11,0.15)' : 
-                                                        noteObj.category === 'todo' ? 'rgba(59,130,246,0.15)' : 
-                                                        noteObj.category === 'architecture' ? 'rgba(168,85,247,0.15)' : 'rgba(16,185,129,0.15)',
-                                            color: noteObj.category === 'gotcha' ? '#f59e0b' : 
-                                                   noteObj.category === 'todo' ? '#3b82f6' : 
-                                                   noteObj.category === 'architecture' ? '#a855f7' : '#10b981'
-                                          }}>
-                                            {noteObj.category}
-                                          </span>
-                                        </div>
-                                        <p style={{ fontSize: '0.76rem', color: '#94a3b8', lineHeight: '1.45', margin: '0 0 10px 0' }}>{noteObj.summary}</p>
-                                        {noteObj.details && (
-                                          <div style={{ fontSize: '0.7rem', color: '#64748b', background: '#07070a', padding: '8px 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.03)', fontFamily: '"Fira Code", monospace', whiteSpace: 'pre-wrap', marginBottom: '10px' }}>
-                                            {noteObj.details}
-                                          </div>
-                                        )}
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '12px', fontSize: '0.62rem', color: '#4b5563', borderTop: '1px solid rgba(255,255,255,0.03)', paddingTop: '8px' }}>
-                                          <span>ID: <code style={{ color: '#cbd5e1' }}>{noteObj.id}</code></span>
-                                          {noteObj.priority && <span>Priority: <strong style={{ color: noteObj.priority === 'critical' ? '#ef4444' : '#64748b' }}>{noteObj.priority}</strong></span>}
-                                        </div>
-                                      </div>
-                                    ))}
-                                  </div>
-                                );
-                              }
-                            } catch (e) {
-                              // Fallback to text if not JSON
-                            }
-
-                            // Fallback rendering
-                            return (
-                              <pre className="code-box" style={{ flex: 1, margin: 0, padding: '20px', overflow: 'auto', fontSize: '0.75rem', fontFamily: '"Fira Code", monospace', background: '#050507', color: '#cbd5e1', lineHeight: '1.6', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.06)' }}>
-                                {getCleanResultText()}
-                              </pre>
-                            );
-                          })()}
-                        </div>
                       ) : (
                         /* Standard JSON/Code output render */
                         <pre className="code-box" style={{ flex: 1, margin: 0, padding: '20px', overflow: 'auto', fontSize: '0.75rem', fontFamily: '"Fira Code", monospace', background: '#050507', color: '#cbd5e1', lineHeight: '1.6', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.06)' }}>
@@ -1845,48 +2017,79 @@ const Playground: React.FC<PlaygroundProps> = ({ db, repoInfo, initialFile, onFi
                         </pre>
                       )}
 
-                      {/* Interactive Cortex Notes Renderer - if returned by server */}
-                      {(toolResult.instructions || toolResult.results || toolResult._cortex || toolResult._insights || (toolResult.insights && toolResult.insights.length > 0)) && (
-                        <div style={{ marginTop: '10px', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '16px' }}>
-                          <h4 style={{ fontSize: '0.8rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px', color: '#34d399', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '12px' }}>
-                            <BookOpen size={14} /> Persistent Cortex Architecture Rules ({((toolResult.instructions || toolResult.results || toolResult._cortex?.notes || toolResult._insights || toolResult.insights || []) as any).length} loaded)
-                          </h4>
-                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '10px' }}>
-                            {((toolResult.instructions || toolResult.results || toolResult._cortex?.notes || toolResult._insights || toolResult.insights || []) as any).map((insight: any, i: number) => {
-                              const noteObj = typeof insight === 'string' ? { title: 'Architectural Note', summary: insight, category: 'guideline' } : insight;
-                              return (
-                                <div 
-                                  key={i}
-                                  style={{ 
-                                    padding: '12px 14px', 
-                                    borderRadius: '8px', 
-                                    background: 'rgba(255,255,255,0.02)', 
-                                    borderLeft: `4px solid ${
-                                      noteObj.category === 'gotcha' ? '#f59e0b' : 
-                                      noteObj.category === 'todo' ? '#3b82f6' : '#10b981'
-                                    }`,
-                                    borderTop: '1px solid rgba(255,255,255,0.04)',
-                                    borderRight: '1px solid rgba(255,255,255,0.04)',
-                                    borderBottom: '1px solid rgba(255,255,255,0.04)'
-                                  }}
-                                >
-                                  <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                                    <span>{noteObj.title}</span>
-                                    <span style={{ 
-                                      fontSize: '0.55rem', fontWeight: 800, padding: '1px 5px', borderRadius: '4px', textTransform: 'uppercase',
-                                      background: noteObj.category === 'gotcha' ? 'rgba(245,158,11,0.15)' : 'rgba(16,185,129,0.15)',
-                                      color: noteObj.category === 'gotcha' ? '#f59e0b' : '#10b981'
-                                    }}>
-                                      {noteObj.category}
-                                    </span>
+                      {/* Interactive Cortex Notes Renderer - if returned by server or parsed from V2 split tools */}
+                      {(() => {
+                        const parsedNotes = getParsedInstructions() || (toolResult._cortex?.notes || toolResult._insights || toolResult.insights);
+                        if (!parsedNotes || !Array.isArray(parsedNotes) || parsedNotes.length === 0) return null;
+
+                        return (
+                          <div style={{ marginTop: '20px', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '16px' }}>
+                            <h4 style={{ fontSize: '0.8rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px', color: '#34d399', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '12px' }}>
+                              <BookOpen size={14} /> Persistent Cortex Architecture Rules ({parsedNotes.length} loaded)
+                            </h4>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '12px' }}>
+                              {parsedNotes.map((insight: any, i: number) => {
+                                const noteObj = typeof insight === 'string' ? { title: 'Architectural Note', summary: insight, category: 'guideline' } : insight;
+                                const isStale = noteObj.title?.includes('[⚠️ STALE]');
+                                const cleanTitle = noteObj.title?.replace(' [⚠️ STALE]', '') || 'Persistent Instruction';
+                                return (
+                                  <div 
+                                    key={i}
+                                    style={{ 
+                                      padding: '14px', 
+                                      borderRadius: '12px', 
+                                      background: isStale ? 'rgba(239,68,68,0.02)' : 'rgba(255,255,255,0.01)', 
+                                      borderLeft: `4px solid ${
+                                        isStale ? '#ef4444' :
+                                        noteObj.category === 'gotcha' ? '#f59e0b' : 
+                                        noteObj.category === 'todo' ? '#3b82f6' : '#10b981'
+                                      }`,
+                                      borderTop: isStale ? '1px solid rgba(239,68,68,0.1)' : '1px solid rgba(255,255,255,0.04)',
+                                      borderRight: isStale ? '1px solid rgba(239,68,68,0.1)' : '1px solid rgba(255,255,255,0.04)',
+                                      borderBottom: isStale ? '1px solid rgba(239,68,68,0.1)' : '1px solid rgba(255,255,255,0.04)',
+                                      position: 'relative'
+                                    }}
+                                  >
+                                    <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                                      <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                        {cleanTitle}
+                                        {isStale && (
+                                          <span style={{ background: 'rgba(239,68,68,0.15)', color: '#f87171', fontSize: '0.6rem', padding: '2px 6px', borderRadius: '4px', border: '1px solid rgba(239,68,68,0.25)', fontWeight: 800 }}>STALE</span>
+                                        )}
+                                      </span>
+                                      <span 
+                                        onClick={() => copyToClipboard(noteObj.id)}
+                                        style={{ fontSize: '0.62rem', color: '#94a3b8', background: 'rgba(255,255,255,0.04)', padding: '2px 6px', borderRadius: '4px', cursor: 'pointer', fontFamily: 'monospace' }}
+                                        title="Click to copy ID"
+                                      >
+                                        {noteObj.id || 'N/A'}
+                                      </span>
+                                    </div>
+                                    <div style={{ fontSize: '0.72rem', color: '#cbd5e1', lineHeight: '1.4', marginBottom: '8px' }}>
+                                      {noteObj.summary}
+                                    </div>
+                                    {noteObj.details && (
+                                      <pre style={{ margin: 0, padding: '8px', fontSize: '0.65rem', background: '#050507', color: '#94a3b8', borderRadius: '6px', overflowX: 'auto', border: '1px solid rgba(255,255,255,0.04)', whiteSpace: 'pre-wrap' }}>
+                                        {noteObj.details}
+                                      </pre>
+                                    )}
+                                    <div style={{ display: 'flex', gap: '6px', marginTop: '8px' }}>
+                                      <span style={{ fontSize: '0.6rem', textTransform: 'uppercase', fontWeight: 800, color: noteObj.category === 'gotcha' ? '#f59e0b' : noteObj.category === 'todo' ? '#3b82f6' : '#10b981', background: 'rgba(255,255,255,0.03)', padding: '2px 6px', borderRadius: '4px' }}>
+                                        {noteObj.category}
+                                      </span>
+                                      {noteObj.priority && (
+                                        <span style={{ fontSize: '0.6rem', textTransform: 'uppercase', fontWeight: 800, color: '#94a3b8', background: 'rgba(255,255,255,0.03)', padding: '2px 6px', borderRadius: '4px' }}>
+                                          {noteObj.priority}
+                                        </span>
+                                      )}
+                                    </div>
                                   </div>
-                                  <div style={{ fontSize: '0.72rem', color: '#cbd5e1', lineHeight: '1.4' }}>{noteObj.summary}</div>
-                                </div>
-                              );
-                            })}
+                                );
+                              })}
+                            </div>
                           </div>
-                        </div>
-                      )}
+                        );
+                      })()}
                     </div>
                     {showComparativeROI && renderComparativeROI()}
                   </div>

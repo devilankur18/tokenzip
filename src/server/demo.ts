@@ -27,6 +27,7 @@ export async function startDemoServer(
 
   if (defaultSession) {
     const { name, path: repoPath, store } = defaultSession;
+    await store.migrate().catch(err => console.error('Failed to migrate default session store:', err));
     const tools = registerTools(store, repoPath, budget, true);
     sessions.set(name, { store, repoPath, tools });
     console.log(`[Demo] Auto-registered local repo: ${name}`);

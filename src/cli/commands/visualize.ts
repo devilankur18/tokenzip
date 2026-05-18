@@ -18,6 +18,7 @@ export const visualizeCommand = new Command('visualize')
     
     try {
       await store.initialize();
+      await store.migrate();
       
       // Get the port from the server.port file
       const parent = path.dirname(dbPath);
