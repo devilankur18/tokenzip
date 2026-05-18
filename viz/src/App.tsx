@@ -834,8 +834,10 @@ const App: React.FC = () => {
           <p>Connecting to Knowledge Graph...</p>
         </div>
       ) : (
-        <div className="graph-container">
-          <ForceGraph2D
+        <>
+          {appMode === 'graph' && (
+            <div className="graph-container">
+              <ForceGraph2D
             ref={fgRef}
             graphData={visibleData}
             nodeLabel={(node: any) => `${node.type}: ${node.name}`}
@@ -960,7 +962,7 @@ const App: React.FC = () => {
                     <BarChart3 size={16} /> Map
                   </button>
                   <button 
-                    className={`mode-btn ${appMode === 'playground' ? 'active' : ''}`}
+                    className={`mode-btn ${(appMode as string) === 'playground' ? 'active' : ''}`}
                     onClick={() => setAppMode('playground')}
                   >
                     <Code2 size={16} /> Playground
@@ -1378,7 +1380,7 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {isNoteModalOpen && selectedNode && (
+      {isNoteModalOpen && selectedNode && appMode === 'graph' && (
         <div className="modal-overlay" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000 }}>
           <div className="modal-content" style={{ background: '#1f2937', padding: '32px', borderRadius: '12px', border: '1px solid #374151', width: '400px', display: 'flex', flexDirection: 'column', gap: '16px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)' }}>
             <h2 style={{ color: '#f3f4f6', margin: 0, fontSize: '1.5rem' }}>{noteForm.id ? 'Edit Context Memory' : 'Add Context Memory'}</h2>
@@ -1433,6 +1435,8 @@ const App: React.FC = () => {
           setAppMode={setAppMode}
         />
       )}
+    </>
+    )}
     </div>
   );
 };
