@@ -1,5 +1,47 @@
-import React from 'react';
-import { Zap } from 'lucide-react';
+import React, { useState } from 'react';
+import { Zap, Copy, Check } from 'lucide-react';
+
+const MiniCopyButton: React.FC<{ text: string }> = ({ text }) => {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <button
+      onClick={handleCopy}
+      style={{
+        background: 'rgba(255, 255, 255, 0.04)',
+        border: '1px solid rgba(255, 255, 255, 0.08)',
+        color: copied ? '#10b981' : '#cbd5e1',
+        padding: '3px 8px',
+        borderRadius: '5px',
+        fontSize: '0.62rem',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '4px',
+        cursor: 'pointer',
+        transition: 'all 0.2s',
+        fontWeight: 600
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
+        e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.15)';
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.background = 'rgba(255, 255, 255, 0.04)';
+        e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.08)';
+      }}
+    >
+      {copied ? <Check size={10} style={{ color: '#10b981' }} /> : <Copy size={10} />}
+      {copied ? 'Copied' : 'Copy'}
+    </button>
+  );
+};
 
 interface ToolCodeReadInputsProps {
   readPath: string;
@@ -220,7 +262,10 @@ export const ToolCodeReadOutput: React.FC<ToolCodeReadOutputProps> = ({
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', minWidth: 0 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '2px 4px' }}>
                         <span style={{ fontSize: '0.7rem', color: '#34d399', fontWeight: 800 }}>V2 SMART READ (MODE: {readMode.toUpperCase()})</span>
-                        <span style={{ fontSize: '0.65rem', color: '#94a3b8' }}>{fCompare?.smartTokens.toLocaleString() || '...'} tokens</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span style={{ fontSize: '0.65rem', color: '#94a3b8' }}>{fCompare?.smartTokens.toLocaleString() || '...'} tokens</span>
+                          <MiniCopyButton text={fileItem.content} />
+                        </div>
                       </div>
                       <pre className="code-box" style={{ flex: 1, margin: 0, padding: '12px', overflow: 'auto', fontSize: '0.7rem', fontFamily: '"Fira Code", monospace', background: '#050507', color: '#cbd5e1', lineHeight: '1.5', borderRadius: '10px', border: '1px solid rgba(52,211,153,0.15)' }}>
                         {fileItem.content}
@@ -231,7 +276,10 @@ export const ToolCodeReadOutput: React.FC<ToolCodeReadOutputProps> = ({
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', minWidth: 0 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '2px 4px' }}>
                         <span style={{ fontSize: '0.7rem', color: '#f87171', fontWeight: 800 }}>V1 RAW READ</span>
-                        <span style={{ fontSize: '0.65rem', color: '#94a3b8' }}>{fCompare?.rawTokens.toLocaleString() || '...'} tokens</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span style={{ fontSize: '0.65rem', color: '#94a3b8' }}>{fCompare?.rawTokens.toLocaleString() || '...'} tokens</span>
+                          <MiniCopyButton text={rContent} />
+                        </div>
                       </div>
                       <pre className="code-box" style={{ flex: 1, margin: 0, padding: '12px', overflow: 'auto', fontSize: '0.7rem', fontFamily: '"Fira Code", monospace', background: '#050507', color: '#94a3b8', lineHeight: '1.5', borderRadius: '10px', border: '1px solid rgba(239,68,68,0.1)' }}>
                         {rContent || 'Loading raw file context...'}
@@ -284,9 +332,12 @@ export const ToolCodeReadOutput: React.FC<ToolCodeReadOutputProps> = ({
               <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#34d399' }}></span>
               V2 SMART READ (MODE: {readMode.toUpperCase()})
             </span>
-            <span style={{ fontSize: '0.7rem', color: '#34d399', background: 'rgba(52,211,153,0.1)', padding: '2px 8px', borderRadius: '6px', fontWeight: 700, border: '1px solid rgba(52,211,153,0.15)' }}>
-              {codeReadCompare ? codeReadCompare.smartTokens.toLocaleString() : '...'} tokens
-            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '0.7rem', color: '#34d399', background: 'rgba(52,211,153,0.1)', padding: '2px 8px', borderRadius: '6px', fontWeight: 700, border: '1px solid rgba(52,211,153,0.15)' }}>
+                {codeReadCompare ? codeReadCompare.smartTokens.toLocaleString() : '...'} tokens
+              </span>
+              <MiniCopyButton text={getCleanResultText()} />
+            </div>
           </div>
           <pre className="code-box" style={{ flex: 1, margin: 0, padding: '16px', overflow: 'auto', fontSize: '0.75rem', fontFamily: '"Fira Code", monospace', background: '#050507', color: '#cbd5e1', lineHeight: '1.6', borderRadius: '12px', border: '1px solid rgba(52,211,153,0.2)' }}>
             {getCleanResultText()}
@@ -300,9 +351,12 @@ export const ToolCodeReadOutput: React.FC<ToolCodeReadOutputProps> = ({
               <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#f87171' }}></span>
               V1 LEGACY FULL FILE READ
             </span>
-            <span style={{ fontSize: '0.7rem', color: '#f87171', background: 'rgba(239,68,68,0.1)', padding: '2px 8px', borderRadius: '6px', fontWeight: 700, border: '1px solid rgba(239,68,68,0.15)' }}>
-              {codeReadCompare ? codeReadCompare.rawTokens.toLocaleString() : '...'} tokens
-            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '0.7rem', color: '#f87171', background: 'rgba(239,68,68,0.1)', padding: '2px 8px', borderRadius: '6px', fontWeight: 700, border: '1px solid rgba(239,68,68,0.15)' }}>
+                {codeReadCompare ? codeReadCompare.rawTokens.toLocaleString() : '...'} tokens
+              </span>
+              <MiniCopyButton text={rawFileContent || ''} />
+            </div>
           </div>
           <pre className="code-box" style={{ flex: 1, margin: 0, padding: '16px', overflow: 'auto', fontSize: '0.75rem', fontFamily: '"Fira Code", monospace', background: '#050507', color: '#94a3b8', lineHeight: '1.6', borderRadius: '12px', border: '1px solid rgba(239,68,68,0.15)' }}>
             {rawFileContent || 'Loading raw file context...'}

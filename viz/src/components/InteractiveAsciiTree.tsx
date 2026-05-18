@@ -9,12 +9,9 @@ export const parseAsciiTree = (text: string) => {
     if (!line.trim()) continue;
 
     // Matches visual branches like "├── ", "└── ", "│   ", "    "
-    const prefixMatch = line.match(/^([│\s├└──\s]*)/);
+    const prefixMatch = line.match(/^([│\s├└───]*)/);
     const prefix = prefixMatch ? prefixMatch[0] : '';
-    
-    // Convert characters to single spaces to determine hierarchy depth
-    const cleanPrefix = prefix.replace(/─/g, '').replace(/├/g, '').replace(/└/g, '').replace(/│/g, ' ');
-    const depth = Math.floor(cleanPrefix.length / 4);
+    const depth = Math.round(prefix.length / 4);
 
     const content = line.substring(prefix.length).trim();
     if (!content) continue;
@@ -37,7 +34,7 @@ export const parseAsciiTree = (text: string) => {
     
     // Reconstruct approximate paths
     activeFoldersAtDepth[depth] = name;
-    const parentPath = activeFoldersAtDepth.slice(1, depth).join('/');
+    const parentPath = activeFoldersAtDepth.slice(0, depth).join('/');
     const fullPath = parentPath ? `${parentPath}/${name}` : name;
 
     treeNodes.push({

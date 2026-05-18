@@ -34,9 +34,22 @@ const Playground: React.FC<PlaygroundProps> = ({ db, repoInfo, initialFile, onFi
   
   // Global States
   const [isRunning, setIsRunning] = useState(false);
-  const [toolResult, setToolResult] = useState<any>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [toolResults, setToolResults] = useState<Record<string, any>>({});
+  const [toolErrors, setToolErrors] = useState<Record<string, string | null>>({});
   const [copied, setCopied] = useState(false);
+
+  const toolResult = toolResults[activeTool] || null;
+  const error = toolErrors[activeTool] || null;
+
+  const setToolResult = (val: any, toolOverride?: string) => {
+    const target = toolOverride || activeTool;
+    setToolResults(prev => ({ ...prev, [target]: val }));
+  };
+
+  const setError = (val: string | null, toolOverride?: string) => {
+    const target = toolOverride || activeTool;
+    setToolErrors(prev => ({ ...prev, [target]: val }));
+  };
   
   // Smart Autocomplete Lists
   const [fileSymbols, setFileSymbols] = useState<string[]>([]);
@@ -249,8 +262,8 @@ const Playground: React.FC<PlaygroundProps> = ({ db, repoInfo, initialFile, onFi
   // Tool Call Wrapper
   const executeToolCall = async (toolName: string, args: any) => {
     setIsRunning(true);
-    setToolResult(null);
-    setError(null);
+    setToolResult(null, toolName);
+    setError(null, toolName);
     try {
       const response = await fetch(`http://localhost:6001/api/tool`, {
         method: 'POST',
@@ -268,10 +281,10 @@ const Playground: React.FC<PlaygroundProps> = ({ db, repoInfo, initialFile, onFi
       }
       
       const res = await response.json();
-      setToolResult(res);
+      setToolResult(res, toolName);
       return res;
     } catch (err: any) {
-      setError(err.message || 'Connection Refused: Ensure TokenZip Demo Backend is running.');
+      setError(err.message || 'Connection Refused: Ensure TokenZip Demo Backend is running.', toolName);
       console.error(`Tool execution failed for ${toolName}:`, err);
     } finally {
       setIsRunning(false);
@@ -562,14 +575,12 @@ const Playground: React.FC<PlaygroundProps> = ({ db, repoInfo, initialFile, onFi
     }
   };
 
-  // Switch tool tabs and clear previous outputs
+  // Switch tool tabs (retaining cached outputs of each tool)
   const handleTabChange = (tool: typeof activeTool) => {
     setActiveTool(tool);
-    setToolResult(null);
-    setError(null);
     
-    // Auto execute read or legacy compare on switch
-    if (selectedFile) {
+    // Auto execute read or legacy compare on switch only if it has not been run yet
+    if (selectedFile && !toolResults[tool]) {
       if (tool === 'code_read') {
         runCodeRead(selectedFile, readMode, readSymbol);
       } else if (tool === 'legacy_compare') {
@@ -621,8 +632,8 @@ const Playground: React.FC<PlaygroundProps> = ({ db, repoInfo, initialFile, onFi
     setSelectedFile(resolvedPath);
     setReadPath(resolvedPath);
     setActiveTool('code_read');
-    setToolResult(null);
-    setError(null);
+    setToolResult(null, 'code_read');
+    setError(null, 'code_read');
     runCodeRead(resolvedPath, 'skeleton');
   };
 
@@ -631,8 +642,8 @@ const Playground: React.FC<PlaygroundProps> = ({ db, repoInfo, initialFile, onFi
     setSelectedFile(resolvedPath);
     setReadPath(resolvedPath);
     setActiveTool('code_read');
-    setToolResult(null);
-    setError(null);
+    setToolResult(null, 'code_read');
+    setError(null, 'code_read');
     
     if (type === 'file') {
       setReadMode('skeleton');
