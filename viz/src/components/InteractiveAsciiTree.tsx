@@ -57,9 +57,10 @@ export const parseAsciiTree = (text: string) => {
 interface InteractiveAsciiTreeProps {
   text: string;
   onFileClick: (path: string) => void;
+  onExportClick?: (filePath: string, exportName: string, type: 'file' | 'symbol') => void;
 }
 
-const InteractiveAsciiTree: React.FC<InteractiveAsciiTreeProps> = ({ text, onFileClick }) => {
+const InteractiveAsciiTree: React.FC<InteractiveAsciiTreeProps> = ({ text, onFileClick, onExportClick }) => {
   const [collapsedPaths, setCollapsedPaths] = useState<Record<string, boolean>>({});
   
   const nodes = useMemo(() => {
@@ -170,23 +171,49 @@ const InteractiveAsciiTree: React.FC<InteractiveAsciiTreeProps> = ({ text, onFil
             
             {node.exports && node.exports.length > 0 && (
               <div style={{ display: 'flex', gap: '6px', overflow: 'hidden', marginLeft: '12px', marginRight: '6px' }}>
-                {node.exports.slice(0, 3).map((exp: any, i: number) => (
-                  <span 
-                    key={i} 
-                    style={{ 
-                      fontSize: '0.58rem', 
-                      background: 'rgba(99,102,241,0.12)', 
-                      border: '1px solid rgba(99,102,241,0.2)',
-                      color: '#a5b4fc', 
-                      padding: '2px 6px', 
-                      borderRadius: '5px',
-                      whiteSpace: 'nowrap',
-                      fontWeight: 700
-                    }}
-                  >
-                    {exp}
-                  </span>
-                ))}
+                {node.exports.slice(0, 3).map((exp: any, i: number) => {
+                  const isFileExport = exp.includes('📄') || exp.endsWith('.ts') || exp.endsWith('.tsx') || exp.endsWith('.js') || exp.endsWith('.jsx') || exp.endsWith('.py') || exp.endsWith('.go') || exp.endsWith('.rs');
+                  const cleanLabel = exp.replace(/^[^\w]+/, '').trim();
+                  
+                  return (
+                    <span 
+                      key={i} 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (onExportClick) {
+                          // Find containing file
+                          let containingFile = node.fullPath;
+                          const fileExport = node.exports.find((ex: string) => ex.includes('📄') || ex.endsWith('.ts') || ex.endsWith('.tsx') || ex.endsWith('.js') || ex.endsWith('.jsx') || ex.endsWith('.py') || ex.endsWith('.go') || ex.endsWith('.rs'));
+                          if (fileExport) {
+                            const cleanFile = fileExport.replace(/^[^\w]+/, '').trim();
+                            const nodeParent = node.fullPath.includes('/') ? node.fullPath.substring(0, node.fullPath.lastIndexOf('/')) : '';
+                            containingFile = nodeParent ? `${nodeParent}/${cleanFile}` : cleanFile;
+                          }
+                          
+                          if (isFileExport) {
+                            onExportClick(containingFile, cleanLabel, 'file');
+                          } else {
+                            onExportClick(containingFile, cleanLabel, 'symbol');
+                          }
+                        }
+                      }}
+                      style={{ 
+                        fontSize: '0.58rem', 
+                        background: isFileExport ? 'rgba(52,211,153,0.12)' : 'rgba(99,102,241,0.12)', 
+                        border: isFileExport ? '1px solid rgba(52,211,153,0.2)' : '1px solid rgba(99,102,241,0.2)',
+                        color: isFileExport ? '#a7f3d0' : '#a5b4fc', 
+                        padding: '2px 6px', 
+                        borderRadius: '5px',
+                        whiteSpace: 'nowrap',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        transition: 'background 0.15s ease'
+                      }}
+                    >
+                      {exp}
+                    </span>
+                  );
+                })}
                 {node.exports.length > 3 && (
                   <span style={{ fontSize: '0.58rem', color: '#64748b', alignSelf: 'center' }}>
                     +{node.exports.length - 3}

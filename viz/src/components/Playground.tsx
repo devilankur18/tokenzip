@@ -580,13 +580,68 @@ const Playground: React.FC<PlaygroundProps> = ({ db, repoInfo, initialFile, onFi
     }
   };
 
+  const resolveAbsolutePath = (partialPath: string): string => {
+    if (!partialPath) return partialPath;
+    const cleanPartial = partialPath.replace(/\\/g, '/');
+    
+    // 1. Direct match if it's already absolute and exists
+    if (playgroundFiles.some(f => f.path === cleanPartial)) {
+      return cleanPartial;
+    }
+    
+    // 2. Suffix match: see if any absolute path ends with the partial path
+    const suffixMatch = playgroundFiles.find(f => f.path.replace(/\\/g, '/').endsWith(cleanPartial));
+    if (suffixMatch) return suffixMatch.path;
+    
+    // 3. Basename/component match: split by '/' and match from right to left
+    const parts = cleanPartial.split('/');
+    for (let i = 0; i < parts.length; i++) {
+      const suffix = parts.slice(i).join('/');
+      if (!suffix || suffix.length < 3) continue;
+      const match = playgroundFiles.find(f => f.path.replace(/\\/g, '/').endsWith(suffix));
+      if (match) return match.path;
+    }
+    
+    // 4. Fallback: if no suffix matches, check if the filename exists anywhere in the absolute paths
+    const filename = parts[parts.length - 1];
+    if (filename) {
+      const match = playgroundFiles.find(f => {
+        const p = f.path.replace(/\\/g, '/');
+        const fileBase = p.split('/').pop() || '';
+        return fileBase === filename || fileBase.toLowerCase().includes(filename.toLowerCase());
+      });
+      if (match) return match.path;
+    }
+    
+    return partialPath;
+  };
+
   const handleFileSelectionFromTree = (filePath: string) => {
-    setSelectedFile(filePath);
-    setReadPath(filePath);
+    const resolvedPath = resolveAbsolutePath(filePath);
+    setSelectedFile(resolvedPath);
+    setReadPath(resolvedPath);
     setActiveTool('code_read');
     setToolResult(null);
     setError(null);
-    runCodeRead(filePath, 'skeleton');
+    runCodeRead(resolvedPath, 'skeleton');
+  };
+
+  const handleExportClickFromTree = (filePath: string, exportLabel: string, type: 'file' | 'symbol') => {
+    const resolvedPath = resolveAbsolutePath(filePath);
+    setSelectedFile(resolvedPath);
+    setReadPath(resolvedPath);
+    setActiveTool('code_read');
+    setToolResult(null);
+    setError(null);
+    
+    if (type === 'file') {
+      setReadMode('skeleton');
+      runCodeRead(resolvedPath, 'skeleton');
+    } else {
+      setReadMode('implementation');
+      setReadSymbol(exportLabel);
+      runCodeRead(resolvedPath, 'implementation', exportLabel);
+    }
   };
 
   // Helper to extract clean text response
@@ -1022,6 +1077,7 @@ const Playground: React.FC<PlaygroundProps> = ({ db, repoInfo, initialFile, onFi
                         <InteractiveAsciiTree 
                           text={getCleanResultText()} 
                           onFileClick={handleFileSelectionFromTree} 
+                          onExportClick={handleExportClickFromTree}
                         />
                       ) : activeTool === 'code_read' ? (
                         <ToolCodeReadOutput 
